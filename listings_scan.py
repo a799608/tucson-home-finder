@@ -2,8 +2,17 @@
 
 Listings layer for a neighborhood-finder map: 1-3BR apartments/houses,
 $700-$2,400/mo, cat-friendly, within 25 mi of the Raytheon airport campus
-(32.1051, -110.9456). Sources: Zumper JSON backend + Craigslist static pages.
+(32.1051, -110.9456). Source: Zumper JSON backend. Craigslist is EXCLUDED
+by scope (2026-07-26) - its code is kept but gated behind --with-craigslist.
 ApartmentList and Apartments.com return hard 403s (Akamai) - skipped.
+
+Contact enrichment (2026-07-26): each listing gets contact_phone /
+contact_name / contact_method / utilities_note / cats_ok. Zumper list rows
+carry a `phone` for ~1/3 of listings; the rest come from the no-login detail
+JSON endpoints /api/t/1/buildings/{building_id} (agents[].phone) and
+/api/t/1/listings/{listing_id} (listing_agents[].phone, description text).
+Detail pulls are cached permanently in zumper_detail_cache.json.
+Phones are only ever copied from source data - never synthesized.
 
 Read-only scraping, no accounts. Throttled ~1.5s between page requests,
 1.05s Nominatim. Raw pulls cached (zumper_raw.json / cl_raw.json, 6h TTL)
@@ -17,13 +26,17 @@ from datetime import datetime, timezone
 import requests
 from bs4 import BeautifulSoup
 
+from laundry_rules import classify as laundry_classify, classify_text as laundry_from_text
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT_PATH = os.path.join(HERE, "listings.json")
 ZUMPER_CACHE = os.path.join(HERE, "zumper_raw.json")
+ZDETAIL_CACHE = os.path.join(HERE, "zumper_detail_cache.json")   # building/listing detail JSON, no TTL
 CL_CACHE = os.path.join(HERE, "cl_raw.json")
 GEO_CACHE_PATH = os.path.join(HERE, "geo_cache.json")  # same pattern as H:/Claude/mp_geocode.py
 CACHE_TTL_S = 6 * 3600
 FRESH = "--fresh" in sys.argv
+INCLUDE_CL = "--with-craigslist" in sys.argv   # Craigslist excluded by default (scope change 2026-07-26)
 
 CENTER = (32.1051, -110.9456)          # Raytheon airport campus
 RADIUS_MI = 25.0
@@ -38,6 +51,52 @@ S = requests.Session(); S.headers.update(UA)
 
 NO_PETS_RE = re.compile(r"\bno pets\b|\bpets? (?:are )?not allowed\b|sorry,? no pets", re.I)
 NO_CATS_RE = re.compile(r"\bdogs? only\b|\bno cats\b", re.I)
+
+# ------------------------------------------------- contact / utilities helpers
+PHONE_SEP_RE = re.compile(r"\(?\b([2-9]\d{2})\)?[\s.\-]{1,2}(\d{3})[\s.\-](\d{4})\b")
+PHONE_BARE_RE = re.compile(r"\b([2-9]\d{2})(\d{3})(\d{4})\b")
+
+def find_phone(text):
+    """Extract a US phone from free text; normalized (AAA) PPP-SSSS or None."""
+    for rx in (PHONE_SEP_RE, PHONE_BARE_RE):
+        m = rx.search(text or "")
+        if m:
+            return f"({m.group(1)}) {m.group(2)}-{m.group(3)}"
+    return None
+
+UTIL_WORD_RE = re.compile(r"utilit|water|sewer|trash|garbage|electric|\bgas\b|internet|cable|wifi|\bheat\b", re.I)
+UTIL_STANCE_RE = re.compile(r"includ|tenant pays|owner pays|landlord pays|responsib|\bpaid\b|covered", re.I)
+UTIL_APPLIANCE_RE = re.compile(r"range|stove|oven|dryer|washer|heater|softn?er|hookup|fireplace|grill|furniture|landscap", re.I)
+
+def utilities_from_tags(tags):
+    """Amenity tags with explicit included/tenant-pays semantics -> note, else None."""
+    out, seen = [], set()
+    for t in tags or []:
+        t = str(t).strip()
+        if not t or not UTIL_STANCE_RE.search(t):
+            continue
+        if not UTIL_WORD_RE.search(t):
+            continue
+        if UTIL_APPLIANCE_RE.search(t):
+            continue
+        k = t.lower()
+        if k not in seen:
+            seen.add(k); out.append(t)
+    return "; ".join(out) if out else None
+
+def utilities_from_desc(desc):
+    """Explicit utility-payment phrases from detail description text, else None."""
+    out = []
+    for m in re.finditer(r"[^.;\n\r]*(?:utilit\w*|water|sewer|trash|garbage|electric\w*|\bgas\b|internet|cable|wifi)[^.;\n\r]*",
+                         desc or "", re.I):
+        s = " ".join(m.group(0).split()).strip(" ,-")
+        if len(s) > 140 or not UTIL_STANCE_RE.search(s) or UTIL_APPLIANCE_RE.search(s):
+            continue
+        if s.lower() not in (o.lower() for o in out):
+            out.append(s)
+        if len(out) >= 2:
+            break
+    return "; ".join(out) if out else None
 
 # ---------------------------------------------------------------- utilities
 def haversine_mi(lat1, lng1, lat2, lng2):
@@ -158,6 +217,11 @@ def norm_zumper(x, drops):
                                  x.get("state"), x.get("zipcode")] if p)
     img = (x.get("image_ids") or [None])[0]
     listed = x.get("listed_on") or x.get("created_on")
+    # contact + utilities + cat flag (list-level; detail enrichment fills gaps later)
+    phone = x.get("phone") or None
+    cname = x.get("brokerage_name") or x.get("agent_name") or None
+    cats_ok = (1 in pets) if isinstance(pets, list) else None   # non-cat lists were dropped above
+    util = utilities_from_tags((x.get("amenity_tags") or []) + (x.get("building_amenity_tags") or []))
     return {
         "id": f"zmp-{x['listing_id']}",
         "source": "zumper",
@@ -173,7 +237,97 @@ def norm_zumper(x, drops):
         "listed_date_or_age": datetime.fromtimestamp(listed, tz=timezone.utc).strftime("%Y-%m-%d") if listed else None,
         "title": x.get("title") or x.get("building_name") or f"{beds}BR in {x.get('city') or 'Tucson'}",
         "thumbnail_url": f"https://img.zumpercdn.com/{img}/640x480" if img else None,
+        "contact_phone": phone,
+        "contact_name": cname,
+        "contact_method": "phone" if phone else "listing_page",
+        "utilities_note": util,
+        "cats_ok": cats_ok,
+        # in_unit | onsite | None - copied from amenity tags/text only (laundry_rules.py)
+        "laundry": laundry_classify((x.get("amenity_tags") or []) + (x.get("building_amenity_tags") or []),
+                                    " ".join(str(x.get(k) or "") for k in ("short_description", "title"))),
     }
+
+_zdetail_cache = None
+def _save_zdetail_cache():
+    try: json.dump(_zdetail_cache, open(ZDETAIL_CACHE, "w", encoding="utf-8"))
+    except Exception: pass
+
+def zumper_detail_get(kind, id_):
+    """GET /api/t/1/{buildings|listings}/{id_} (no login needed). Permanent local
+    cache - contact data is stable; delete zumper_detail_cache.json to refresh."""
+    global _zdetail_cache
+    if _zdetail_cache is None:
+        _zdetail_cache = {}
+        if os.path.exists(ZDETAIL_CACHE):
+            try: _zdetail_cache = json.load(open(ZDETAIL_CACHE, encoding="utf-8"))
+            except Exception: _zdetail_cache = {}
+    key = f"{kind}:{id_}"
+    if key in _zdetail_cache:
+        return _zdetail_cache[key]
+    try:
+        time.sleep(1.5)
+        r = S.get(f"https://www.zumper.com/api/t/1/{kind}/{id_}", timeout=25)
+        _zdetail_cache[key] = r.json() if r.status_code == 200 else None
+    except Exception:
+        _zdetail_cache[key] = None
+    if len(_zdetail_cache) % 25 == 0:
+        _save_zdetail_cache()
+    return _zdetail_cache[key]
+
+def enrich_zumper_contacts(listings, raw_rows):
+    """Second pass over final zumper rows lacking a list-level phone or a
+    laundry classification. Building pages expose agents[].phone, listing pages
+    listing_agents[].phone; detail amenity tags + description also fill the
+    laundry field. Copies only - a phone is never synthesized; null beats
+    guessed."""
+    raw_by_id = {r["listing_id"]: r for r in raw_rows}
+    need = [l for l in listings if l["source"] == "zumper"
+            and (not l["contact_phone"] or not l.get("laundry"))]
+    to_fetch = {}          # cache-key -> (kind, id_) so shared buildings fetch once
+    for l in need:
+        r = raw_by_id.get(int(l["id"].split("-", 1)[1]), {})
+        if r.get("building_id"):
+            to_fetch[f"buildings:{r['building_id']}"] = None
+        else:
+            to_fetch[f"listings:{r.get('listing_id')}"] = None
+    print(f"[zumper] contact enrichment: {len(need)} rows lack list-level phone; "
+          f"{len(to_fetch)} detail fetches (~{len(to_fetch) * 1.6 / 60:.0f} min)")
+    got = 0
+    for i, l in enumerate(need):
+        lid = int(l["id"].split("-", 1)[1])
+        r = raw_by_id.get(lid, {})
+        if r.get("building_id"):
+            d = zumper_detail_get("buildings", r["building_id"]) or {}
+            agents = d.get("agents") or []
+        else:
+            d = zumper_detail_get("listings", lid) or {}
+            agents = d.get("listing_agents") or []
+        phone = name = None
+        for a in agents:
+            if not isinstance(a, dict):
+                continue
+            phone = phone or a.get("phone")
+            name = name or a.get("company_name") or a.get("brokerage") or a.get("long_name")
+        desc = d.get("description") or ""
+        if not phone:
+            phone = find_phone(desc)                 # poster's own text, copied verbatim
+        if phone:
+            l["contact_phone"] = phone
+            l["contact_method"] = "phone"
+            got += 1
+        if name and not l["contact_name"]:
+            l["contact_name"] = name
+        tags = (d.get("amenity_tags") or []) + (d.get("building_amenity_tags") or [])
+        if isinstance(d.get("amenity_groups"), dict):
+            tags += list(d["amenity_groups"])       # detail JSON keys tag names here
+        if not l["utilities_note"]:
+            l["utilities_note"] = utilities_from_tags(tags) or utilities_from_desc(desc)
+        if not l.get("laundry"):
+            l["laundry"] = laundry_classify(tags, desc)
+        if i % 50 == 49:
+            print(f"[zumper] enrichment {i + 1}/{len(need)} (+{got} phones so far)")
+    _save_zdetail_cache()
+    print(f"[zumper] enrichment done: +{got} phones from detail JSON")
 
 # ---------------------------------------------------------------- Craigslist
 CL_SEARCH = "https://tucson.craigslist.org/search/apa"
@@ -307,6 +461,14 @@ def norm_cl(x, drops):
         "listed_date_or_age": x.get("posted"),
         "title": x.get("title") or f"{beds}BR in Tucson",
         "thumbnail_url": x.get("thumb"),
+        # schema parity with zumper rows (CL contact enrichment excluded by scope)
+        "contact_phone": None,
+        "contact_name": None,
+        "contact_method": "listing_page",
+        "utilities_note": None,
+        "cats_ok": True if x.get("cats_ok") else None,
+        "laundry": laundry_from_text(" ".join([x.get("body") or "", x.get("title") or ""]
+                                              + [str(a) for a in (x.get("attrs") or [])])),
     }
 
 # ---------------------------------------------------------------- dedupe + main
@@ -321,16 +483,23 @@ def dedupe_keys(l):
 
 def main():
     failed = {"apartmentlist": "HTTP 403 (bot-blocked)", "apartments.com": "HTTP 403 Access Denied (Akamai)"}
+    if not INCLUDE_CL:
+        failed["craigslist"] = "excluded by scope 2026-07-26 (--with-craigslist to re-enable)"
     per_source_kept, drops_by_src = {}, {}
-    listings = []
+    listings, zumper_raw_rows = [], []
 
-    for name, fetch, norm in (("zumper", fetch_zumper_raw, norm_zumper),
-                              ("craigslist", fetch_cl_raw, norm_cl)):
+    sources = [("zumper", fetch_zumper_raw, norm_zumper)]
+    if INCLUDE_CL:
+        sources.append(("craigslist", fetch_cl_raw, norm_cl))
+    for name, fetch, norm in sources:
         drops = {k: 0 for k in ("no_coords", "too_far", "excluded_city", "no_price",
                                 "price_band", "no_beds", "beds_band", "pets")}
         kept = []
         try:
-            for raw in fetch():
+            raws = fetch()
+            if name == "zumper":
+                zumper_raw_rows = raws
+            for raw in raws:
                 l = norm(raw, drops)
                 if l: kept.append(l)
         except Exception as e:
@@ -347,6 +516,9 @@ def main():
         seen.update(ks)
         out.append(l)
 
+    if zumper_raw_rows:                      # after dedupe so dupes don't cost fetches
+        enrich_zumper_contacts(out, zumper_raw_rows)
+
     json.dump(out, open(OUT_PATH, "w", encoding="utf-8"), indent=1)
 
     prices = sorted(l["price"] for l in out)
@@ -360,6 +532,16 @@ def main():
     if prices:
         print(f"price: min ${prices[0]}  median ${med}  max ${prices[-1]}")
     print("property types:", types)
+    ph = {}
+    for l in out:
+        s = l["source"]
+        ph.setdefault(s, [0, 0])[1] += 1
+        if l["contact_phone"]: ph[s][0] += 1
+    print("contact_phone coverage:", {s: f"{v[0]}/{v[1]}" for s, v in ph.items()})
+    print("contact_name:", sum(1 for l in out if l["contact_name"]),
+          "| utilities_note:", sum(1 for l in out if l["utilities_note"]),
+          "| cats_ok true/null:", sum(1 for l in out if l["cats_ok"] is True),
+          "/", sum(1 for l in out if l["cats_ok"] is None))
     print("drop reasons:", {s: {k: v for k, v in d.items() if v} for s, d in drops_by_src.items()})
     print("failed/blocked sources:", failed)
     print("output:", OUT_PATH)
