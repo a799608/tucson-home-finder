@@ -15,6 +15,9 @@
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   html, body { height: 100%; margin: 0; font-family: "Segoe UI", system-ui, sans-serif; }
   #map { height: 100%; width: 100%; }
@@ -502,6 +505,116 @@
   legend.addTo(map);
 
   updateUI();
+
+  // ---- Listings layer (listings.json, refreshed by listings_scan.py) ----
+  var listingsData = [];
+  var listingCluster = null;
+  var listingsVisible = true;
+  var hiddenIds = {};
+  try { hiddenIds = JSON.parse(localStorage.getItem('rejectedListings') || '{}'); } catch (e) {}
+
+  var TYPE_COLOR = { apartment: '#1565c0', house: '#2e7d32', condo: '#7b1fa2' };
+  var typeOn = { apartment: true, house: true, condo: true };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function listingShown(l) {
+    return listingsVisible && typeOn[l.property_type] !== false &&
+           !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
+  }
+
+  window._hideListing = function (id) {
+    var reason = window.prompt('Pass on this one — why? (optional; helps tune his preferences)') || '';
+    hiddenIds[id] = { when: new Date().toISOString(), reason: reason };
+    localStorage.setItem('rejectedListings', JSON.stringify(hiddenIds));
+    map.closePopup();
+    rebuildListings();
+  };
+  window._resetHidden = function () {
+    if (!window.confirm('Un-hide all ' + Object.keys(hiddenIds).length + ' hidden listings?')) return;
+    hiddenIds = {};
+    localStorage.setItem('rejectedListings', '{}');
+    rebuildListings();
+  };
+  window._copyHidden = function () {
+    var txt = JSON.stringify(hiddenIds, null, 1);
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(
+      function () { alert('Copied ' + Object.keys(hiddenIds).length + ' rejections — paste them to Dad/Claude to tune the model.'); },
+      function () { window.prompt('Copy this and send it to Dad/Claude:', txt); });
+  };
+
+  function listingPopup(l) {
+    var h = '<div style="font-size:12.5px;max-width:270px">';
+    if (l.thumbnail_url) h += '<img src="' + esc(l.thumbnail_url) + '" style="width:100%;max-height:130px;object-fit:cover;border-radius:4px" onerror="this.style.display=\'none\'">';
+    h += '<div style="font-weight:700;font-size:14px;margin-top:4px">$' + (l.price ? l.price.toLocaleString() : '?') + '/mo' +
+         ' <span style="font-weight:400;color:#555">&middot; ' + esc(l.beds) + ' bd / ' + esc(l.baths == null ? '?' : l.baths) + ' ba' +
+         (l.sqft ? ' &middot; ' + l.sqft.toLocaleString() + ' sqft' : '') + '</span></div>';
+    h += '<div style="color:#333">' + esc(l.title) + '</div>';
+    h += '<div style="color:#666">' + esc(l.address) + '</div>';
+    h += '<div style="color:#666;text-transform:capitalize">' + esc(l.property_type) + ' &middot; ' + esc(l.pets_note || 'pets: see listing') + '</div>';
+    h += '<div style="margin-top:6px;display:flex;gap:6px">' +
+         '<a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#1e8a3c;color:#fff;padding:5px 0;border-radius:4px;text-decoration:none;font-weight:600">View listing</a>' +
+         '<button onclick="_hideListing(\'' + esc(l.id) + '\')" style="flex:1;background:#fff;border:1px solid #c33;color:#c33;border-radius:4px;cursor:pointer;font-weight:600">&#10008; Pass</button>' +
+         '</div>';
+    h += '<div style="color:#999;font-size:10.5px;margin-top:3px">source: ' + esc(l.source) + ' &middot; ' + esc(l.listed_date_or_age || '') + '</div></div>';
+    return h;
+  }
+
+  function rebuildListings() {
+    if (!listingCluster) return;
+    listingCluster.clearLayers();
+    var shown = 0;
+    listingsData.forEach(function (l) {
+      if (!l.lat || !l.lng || !listingShown(l)) return;
+      shown++;
+      var m = L.circleMarker([l.lat, l.lng], {
+        radius: 6, color: '#fff', weight: 1.5,
+        fillColor: TYPE_COLOR[l.property_type] || '#555', fillOpacity: 0.95
+      });
+      m.bindPopup(listingPopup(l), { maxWidth: 300 });
+      listingCluster.addLayer(m);
+    });
+    var cEl = document.getElementById('lst-count');
+    if (cEl) {
+      var hid = Object.keys(hiddenIds).length;
+      cEl.innerHTML = shown.toLocaleString() + ' shown (&le; $' + maxRent.toLocaleString() + ')' +
+        (hid ? ' &middot; ' + hid + ' passed <a href="#" onclick="_resetHidden();return false">reset</a> ' +
+               '<a href="#" onclick="_copyHidden();return false">copy</a>' : '');
+    }
+  }
+
+  fetch('listings.json').then(function (r) { return r.json(); }).then(function (d) {
+    listingsData = d;
+    listingCluster = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 46, disableClusteringAtZoom: 15 }) : L.layerGroup());
+    map.addLayer(listingCluster);
+
+    var lc = L.control({ position: 'bottomleft' });
+    lc.onAdd = function () {
+      var d2 = L.DomUtil.create('div', 'legend');
+      d2.style.maxWidth = '230px';
+      d2.innerHTML = '<h4 style="margin:0 0 4px">Current rental listings</h4>' +
+        '<label style="display:block"><input type="checkbox" id="lst-on" checked> Show listings</label>' +
+        '<label style="margin-right:6px"><input type="checkbox" id="lst-apartment" checked> <span style="color:' + TYPE_COLOR.apartment + '">&#9679;</span> Apt</label>' +
+        '<label style="margin-right:6px"><input type="checkbox" id="lst-house" checked> <span style="color:' + TYPE_COLOR.house + '">&#9679;</span> House</label>' +
+        '<label><input type="checkbox" id="lst-condo" checked> <span style="color:' + TYPE_COLOR.condo + '">&#9679;</span> Condo</label>' +
+        '<div id="lst-count" style="font-size:11px;color:#555;margin-top:3px"></div>' +
+        '<div style="font-size:10.5px;color:#888">Cat-friendly, $700&ndash;2,400. Follows the Max-rent slider. Click a pin &rarr; View or &#10008; Pass (with a why).</div>';
+      L.DomEvent.disableClickPropagation(d2);
+      return d2;
+    };
+    lc.addTo(map);
+
+    document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
+    ['apartment', 'house', 'condo'].forEach(function (t) {
+      document.getElementById('lst-' + t).addEventListener('change', function (ev) { typeOn[t] = ev.target.checked; rebuildListings(); });
+    });
+    document.getElementById('rentslider').addEventListener('input', rebuildListings);
+    rebuildListings();
+  }).catch(function (e) {
+    console.log('listings.json not available (local file view?): ' + e);
+  });
 </script>
 </body>
 </html>
