@@ -367,6 +367,13 @@
     }
     html += '<br><span style="color:#888;font-size:11px">Rents: approx. 2025&ndash;26 listing averages ' +
             '(Apartments.com / RentCafe / Zumper / ApartmentList). Preliminary rating.</span>';
+    if (typeof listingsData !== 'undefined' && listingsData.length) {
+      var nL = hoodListingCount(h);
+      html += '<div style="margin-top:6px;padding-top:6px;border-top:1px solid #ddd">' +
+        '<b>' + nL + '</b> current listing' + (nL === 1 ? '' : 's') + ' here match his filters ' +
+        (nL ? '&mdash; <a href="#" onclick="_showHoodListings(' + hoods.indexOf(h) + ');return false" style="font-weight:600">show them</a>' : '') +
+        '</div>';
+    }
     return html;
   }
 
@@ -521,8 +528,28 @@
   }
 
   var minBeds = 1, maxBeds = 99, minBaths = 0, maxBaths = 99;
+  var zonesOnly = true;   // default: only listings inside neighborhoods currently rating green/blue
+
+  // Assign each listing to the neighborhood circle it falls inside (nearest center wins on overlap)
+  function assignHood(l) {
+    var best = null, bestRatio = 1e9;
+    hoods.forEach(function (h) {
+      var d = map.distance([l.lat, l.lng], h.ll);
+      if (d <= h.rad && d / h.rad < bestRatio) { bestRatio = d / h.rad; best = h; }
+    });
+    return best;
+  }
+
+  var selectedHood = null;   // set when user clicks "show listings" on a neighborhood popup
 
   function listingShown(l) {
+    if (selectedHood) {
+      if (l._hood !== selectedHood) return false;
+    } else if (zonesOnly) {
+      if (!l._hood) return false;
+      var tier = currentTierName(l._hood);
+      if (tier !== 'green' && tier !== 'blue') return false;
+    }
     var bd = (l.beds == null ? 1 : l.beds), ba = l.baths;
     if (bd < minBeds || bd > maxBeds) return false;
     if (ba != null && (ba < minBaths || ba > maxBaths)) return false;
@@ -585,16 +612,52 @@
     var cEl = document.getElementById('lst-count');
     if (cEl) {
       var hid = Object.keys(hiddenIds).length;
-      cEl.innerHTML = shown.toLocaleString() + ' shown (&le; $' + maxRent.toLocaleString() + ')' +
+      var scope = selectedHood
+        ? '<b>' + selectedHood.name + '</b> only <a href="#" onclick="_clearHoodFilter();return false">(back to all his zones)</a> &middot; '
+        : (zonesOnly ? 'his green/blue zones &middot; ' : 'entire metro &middot; ');
+      cEl.innerHTML = scope + shown.toLocaleString() + ' shown (&le; $' + maxRent.toLocaleString() + ')' +
         (hid ? ' &middot; ' + hid + ' passed <a href="#" onclick="_resetHidden();return false">reset</a> ' +
                '<a href="#" onclick="_copyHidden();return false">copy</a>' : '');
     }
   }
 
+  window._showHoodListings = function (i) {
+    selectedHood = hoods[i];
+    map.closePopup();
+    var c = circles.filter(function (e) { return e.hood === selectedHood; })[0];
+    if (c) map.fitBounds(c.circle.getBounds().pad(0.3));
+    rebuildListings();
+  };
+  window._clearHoodFilter = function () {
+    selectedHood = null;
+    rebuildListings();
+  };
+
+  // Count of this hood's listings that pass the non-zone filters (for the neighborhood popup)
+  function hoodListingCount(h) {
+    var n = 0;
+    listingsData.forEach(function (l) {
+      if (l._hood !== h || hiddenIds[l.id]) return;
+      if (typeOn[l.property_type] === false) return;
+      var bd = (l.beds == null ? 1 : l.beds), ba = l.baths;
+      if (bd < minBeds || bd > maxBeds) return;
+      if (ba != null && (ba < minBaths || ba > maxBaths)) return;
+      if (ba == null && minBaths > 0) return;
+      if (l.price && l.price > maxRent) return;
+      n++;
+    });
+    return n;
+  }
+
   fetch('listings.json').then(function (r) { return r.json(); }).then(function (d) {
     listingsData = d;
+    listingsData.forEach(function (l) { l._hood = (l.lat && l.lng) ? assignHood(l) : null; });
     listingCluster = (L.markerClusterGroup ? L.markerClusterGroup({ maxClusterRadius: 46, disableClusteringAtZoom: 15 }) : L.layerGroup());
     map.addLayer(listingCluster);
+
+    // Re-filter listings whenever the neighborhood scoring changes (toggles/sliders/preset)
+    var _origUpdateUI = updateUI;
+    updateUI = function () { _origUpdateUI(); rebuildListings(); };
 
     var lc = L.control({ position: 'bottomleft' });
     lc.onAdd = function () {
@@ -602,6 +665,7 @@
       d2.style.maxWidth = '230px';
       d2.innerHTML = '<h4 style="margin:0 0 4px">Current rental listings</h4>' +
         '<label style="display:block"><input type="checkbox" id="lst-on" checked> Show listings</label>' +
+        '<label style="display:block"><input type="checkbox" id="lst-zones" checked> Only his green/blue zones</label>' +
         '<label style="margin-right:6px"><input type="checkbox" id="lst-apartment" checked> <span style="color:' + TYPE_COLOR.apartment + '">&#9679;</span> Apt</label>' +
         '<label style="margin-right:6px"><input type="checkbox" id="lst-house" checked> <span style="color:' + TYPE_COLOR.house + '">&#9679;</span> House</label>' +
         '<label><input type="checkbox" id="lst-condo" checked> <span style="color:' + TYPE_COLOR.condo + '">&#9679;</span> Condo</label>' +
@@ -618,6 +682,7 @@
     lc.addTo(map);
 
     document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
+    document.getElementById('lst-zones').addEventListener('change', function (ev) { zonesOnly = ev.target.checked; selectedHood = null; rebuildListings(); });
     ['apartment', 'house', 'condo'].forEach(function (t) {
       document.getElementById('lst-' + t).addEventListener('change', function (ev) { typeOn[t] = ev.target.checked; rebuildListings(); });
     });
