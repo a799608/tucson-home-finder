@@ -520,7 +520,13 @@
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  var minBeds = 1, maxBeds = 99, minBaths = 0, maxBaths = 99;
+
   function listingShown(l) {
+    var bd = (l.beds == null ? 1 : l.beds), ba = l.baths;
+    if (bd < minBeds || bd > maxBeds) return false;
+    if (ba != null && (ba < minBaths || ba > maxBaths)) return false;
+    if (ba == null && minBaths > 0) return false;
     return listingsVisible && typeOn[l.property_type] !== false &&
            !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
   }
@@ -599,6 +605,11 @@
         '<label style="margin-right:6px"><input type="checkbox" id="lst-apartment" checked> <span style="color:' + TYPE_COLOR.apartment + '">&#9679;</span> Apt</label>' +
         '<label style="margin-right:6px"><input type="checkbox" id="lst-house" checked> <span style="color:' + TYPE_COLOR.house + '">&#9679;</span> House</label>' +
         '<label><input type="checkbox" id="lst-condo" checked> <span style="color:' + TYPE_COLOR.condo + '">&#9679;</span> Condo</label>' +
+        '<div style="margin-top:4px;font-size:11.5px">Beds ' +
+        '<select id="lst-bdmin"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select>' +
+        ' to <select id="lst-bdmax"><option value="1">1</option><option value="2">2</option><option value="99" selected>3+</option></select>' +
+        ' &nbsp;Baths <select id="lst-bamin"><option value="0" selected>any</option><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option></select>' +
+        ' to <select id="lst-bamax"><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option><option value="99" selected>any</option></select></div>' +
         '<div id="lst-count" style="font-size:11px;color:#555;margin-top:3px"></div>' +
         '<div style="font-size:10.5px;color:#888">Cat-friendly, $700&ndash;2,400. Follows the Max-rent slider. Click a pin &rarr; View or &#10008; Pass (with a why).</div>';
       L.DomEvent.disableClickPropagation(d2);
@@ -611,6 +622,10 @@
       document.getElementById('lst-' + t).addEventListener('change', function (ev) { typeOn[t] = ev.target.checked; rebuildListings(); });
     });
     document.getElementById('rentslider').addEventListener('input', rebuildListings);
+    document.getElementById('lst-bdmin').addEventListener('change', function (ev) { minBeds = parseFloat(ev.target.value); rebuildListings(); });
+    document.getElementById('lst-bdmax').addEventListener('change', function (ev) { maxBeds = parseFloat(ev.target.value); rebuildListings(); });
+    document.getElementById('lst-bamin').addEventListener('change', function (ev) { minBaths = parseFloat(ev.target.value); rebuildListings(); });
+    document.getElementById('lst-bamax').addEventListener('change', function (ev) { maxBaths = parseFloat(ev.target.value); rebuildListings(); });
     rebuildListings();
   }).catch(function (e) {
     console.log('listings.json not available (local file view?): ' + e);
