@@ -1,0 +1,3 @@
+geo_cache.json
+*.log
+__pycache__/

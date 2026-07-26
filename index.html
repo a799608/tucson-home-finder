@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tucson Neighborhood Finder — Raytheon Airport Campus</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  html, body { height: 100%; margin: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+  #map { height: 100%; width: 100%; }
+
+  .title-box {
+    background: rgba(255,255,255,0.95);
+    padding: 10px 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    font-size: 17px;
+    font-weight: 700;
+    color: #1a1a2e;
+    max-width: 380px;
+    line-height: 1.3;
+  }
+  .title-box .sub { font-size: 12px; font-weight: 400; color: #555; margin-top: 3px; }
+
+  .legend, .togglepanel {
+    background: rgba(255,255,255,0.96);
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    font-size: 13px;
+    color: #222;
+    line-height: 1.5;
+  }
+  .legend { max-width: 300px; }
+  .legend h4, .togglepanel h4 { margin: 0 0 6px; font-size: 13px; }
+  .legend .prelim {
+    font-style: italic; font-size: 11.5px; color: #b45309;
+    border-top: 1px solid #ddd; margin-top: 8px; padding-top: 6px;
+  }
+  .legend .swatch {
+    display: inline-block; width: 14px; height: 14px; border-radius: 50%;
+    margin-right: 7px; vertical-align: -2px; border: 2px solid rgba(0,0,0,0.35);
+  }
+  .legend .ringnote { font-size: 11.5px; color: #555; margin-top: 6px; }
+
+  .togglepanel { max-width: 280px; }
+  .togglepanel label { display: block; font-size: 12.5px; cursor: pointer; margin: 2px 0; }
+  .togglepanel input { vertical-align: -2px; margin-right: 6px; }
+  .togglepanel .btnrow { margin-top: 8px; }
+  .togglepanel button {
+    font-size: 12px; padding: 4px 10px; margin-right: 6px; cursor: pointer;
+    border: 1px solid #999; border-radius: 5px; background: #f4f4f4;
+  }
+  .togglepanel button.preset { background: #1e8a3c; color: #fff; border-color: #157030; font-weight: 600; }
+  .togglepanel .note { font-size: 11px; color: #666; margin-top: 7px; border-top: 1px solid #ddd; padding-top: 5px; }
+  .togglepanel .grouphdr { font-size: 11px; font-weight: 700; color: #555; margin-top: 6px; text-transform: uppercase; letter-spacing: .4px; }
+
+  .rtx-icon {
+    font-size: 26px; line-height: 26px; text-align: center;
+    color: #d21f1f; text-shadow: 0 0 3px #fff, 0 0 6px #fff;
+  }
+  .hood-label {
+    background: transparent; border: none; box-shadow: none;
+    font-size: 11px; font-weight: 600; color: #1a1a2e;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 4px #fff;
+  }
+  .ring-label {
+    background: transparent; border: none; box-shadow: none;
+    font-size: 11px; font-weight: 600; color: #7a4a00;
+    text-shadow: 0 0 3px #fff, 0 0 3px #fff;
+  }
+  .leaflet-popup-content { font-size: 13px; line-height: 1.45; }
+  .leaflet-popup-content b.hood { font-size: 14px; }
+  .fit-tag { display: inline-block; padding: 1px 7px; border-radius: 9px;
+             font-size: 11px; font-weight: 700; color: #fff; margin-left: 4px; }
+  table.scores { border-collapse: collapse; margin-top: 6px; font-size: 11.5px; }
+  table.scores td { padding: 0 8px 0 0; color: #555; }
+  table.scores td.on { color: #111; font-weight: 600; }
+  table.scores td.num { text-align: right; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  // ---------------------------------------------------------------
+  // Raytheon (RTX) Missiles & Defense HQ — 1151 E Hermans Rd, Tucson
+  // (adjacent to Tucson International Airport, south side)
+  // ---------------------------------------------------------------
+  var RTX = [32.1051, -110.9456];
+
+  var map = L.map('map').setView([32.13, -110.90], 10);
+
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  // ---- Raytheon marker (red star) ----
+  var rtxIcon = L.divIcon({ className: 'rtx-icon', html: '&#9733;', iconSize: [26,26], iconAnchor: [13,13] });
+  L.marker(RTX, { icon: rtxIcon, zIndexOffset: 1000 })
+    .addTo(map)
+    .bindTooltip('Raytheon / RTX — Airport Campus', { permanent: true, direction: 'right', offset: [12,0], className: 'hood-label' })
+    .bindPopup('<b class="hood">Raytheon (RTX Missiles &amp; Defense)</b><br>' +
+               '1151 E Hermans Rd — main Tucson campus on the south side of Tucson International Airport. ' +
+               'All commute rings on this map are centered here.');
+
+  // ---- Commute rings (radius approximations of drive time) ----
+  var MI = 1609.34;
+  [{ r: 8,  label: '~15 min drive (≈8 mi)' },
+   { r: 14, label: '~25 min drive (≈14 mi)' },
+   { r: 20, label: '~35 min drive (≈20 mi)' }].forEach(function (ring) {
+    L.circle(RTX, {
+      radius: ring.r * MI,
+      color: '#8a6d1f', weight: 1.5, dashArray: '6 6',
+      fill: true, fillColor: '#c9a227', fillOpacity: 0.03
+    }).addTo(map);
+    var labelLat = RTX[0] + ring.r / 69.05;   // 1 deg lat ~ 69 mi
+    L.marker([labelLat, RTX[1]], {
+      icon: L.divIcon({ className: 'ring-label', html: ring.label, iconSize: [150, 14], iconAnchor: [75, 7] }),
+      interactive: false
+    }).addTo(map);
+  });
+
+  // ---- Fit categories (tier order: gray < orange < blue < green) ----
+  var TIERS = ['gray', 'orange', 'blue', 'green'];
+  var FIT = {
+    green:  { color: '#1e8a3c', name: 'Strong candidate' },
+    blue:   { color: '#2563c9', name: 'Potential / depends on preferences' },
+    orange: { color: '#e07b00', name: 'Marginal' },
+    gray:   { color: '#7a7a7a', name: 'Likely ruled out' }
+  };
+
+  // ---- Lifestyle dimensions (all scores 0-5) ----
+  var DIMS = [
+    { key: 'jazz',  label: 'Live jazz (Century Room / Jazz Fest)' },
+    { key: 'music', label: 'Live music venues (Rialto, Fox, 191 Toole)' },
+    { key: 'night', label: 'Bar/club nightlife (4th Ave / University)' },
+    { key: 'climb', label: 'Rock climbing (Rocks & Ropes, BLOC, Mt Lemmon)' },
+    { key: 'hike',  label: 'Hiking access' },
+    { key: 'ypro',  label: 'Young-professional crowd' },
+    { key: 'rest',  label: 'Restaurants' },
+    { key: 'gym',   label: 'Gym access' }
+  ];
+  // Son's preset: jazz ON, live music ON, nightlife OFF, plus climb/hike/ypro/rest/gym
+  var SON_PRESET = { jazz: true, music: true, night: false, climb: true, hike: true, ypro: true, rest: true, gym: true };
+
+  // ---- Neighborhoods ----
+  // fit = preliminary (baseline) rating; s = per-dimension scores 0-5;
+  // cm = commute score 0-5 (5 = shortest drive to RTX). rad = display radius (m).
+  var hoods = [
+    {
+      name: 'Downtown / 4th Ave', ll: [32.2225, -110.9680], rad: 1400, fit: 'green', cm: 4,
+      s: { jazz: 5, music: 5, night: 5, climb: 5, hike: 3, ypro: 5, rest: 5, gym: 4 },
+      txt: 'The center of Tucson nightlife and its live-music row: Rialto Theatre, Fox Theatre, 191 Toole, Club Congress — and the Century Room jazz club inside Hotel Congress (the Tucson Jazz Festival runs downtown every January). Rocks &amp; Ropes climbing gym is on S Toole Ave. 1BR runs roughly ~$1,100&ndash;1,700. Reverse commute straight south on I-10/Benson Hwy, about 15&ndash;20 min.'
+    },
+    {
+      name: 'Armory Park', ll: [32.2145, -110.9660], rad: 900, fit: 'green', cm: 4,
+      s: { jazz: 5, music: 5, night: 4, climb: 4.5, hike: 3, ypro: 4.5, rest: 4.5, gym: 4 },
+      txt: 'Historic, walkable district on the south edge of downtown — adobe row houses and Victorians, ranked among Tucson’s best areas for young professionals. Ten-minute walk to the Century Room jazz club and the downtown venue row. 1BR roughly ~$1,100&ndash;1,400. One of the shortest quality-of-life commutes on the map: ~15 min south to the plant.'
+    },
+    {
+      name: 'Barrio Viejo', ll: [32.2120, -110.9720], rad: 700, fit: 'blue', cm: 4,
+      s: { jazz: 4, music: 4, night: 4, climb: 4, hike: 3, ypro: 4, rest: 4, gym: 3.5 },
+      txt: 'Tucson’s most photogenic neighborhood — colorful 19th-century adobes just south of downtown, an easy walk/bike to the Century Room and the venue row. Very small rental inventory; expect ~$1,200&ndash;1,800 when something appears. Same easy ~15 min commute as Armory Park; blue only because supply is thin.'
+    },
+    {
+      name: 'University / West University', ll: [32.2330, -110.9590], rad: 1000, fit: 'blue', cm: 3.5,
+      s: { jazz: 3, music: 4, night: 5, climb: 4, hike: 2.5, ypro: 2.5, rest: 3.5, gym: 4.5 },
+      txt: 'Directly around the UA campus: cheap and lively, the epicenter of the bar/club scene — but dominated by undergrads and purpose-built student housing. 1BR roughly ~$900&ndash;1,300. Fine commute (~20 min), but a young professional may feel done with the student scene — depends on preference.'
+    },
+    {
+      name: 'Sam Hughes', ll: [32.2290, -110.9300], rad: 1200, fit: 'green', cm: 3.5,
+      s: { jazz: 2.5, music: 3, night: 3, climb: 3.5, hike: 3, ypro: 4, rest: 3.5, gym: 4 },
+      txt: 'Leafy historic neighborhood east of UA — bungalows, casitas, and small complexes; consistently rated a top spot for young professionals who want quiet-but-close. 1BR roughly ~$1,000&ndash;1,400. About 20 min to Raytheon via Campbell/Kino Pkwy south; ~10 min drive to the downtown venues.'
+    },
+    {
+      name: 'Menlo Park / Mercado', ll: [32.2220, -110.9850], rad: 1000, fit: 'blue', cm: 3.5,
+      s: { jazz: 3, music: 3, night: 2.5, climb: 3.5, hike: 4, ypro: 3.5, rest: 4, gym: 3 },
+      txt: 'Up-and-coming west-of-I-10 neighborhood anchored by the Mercado San Agustin district, with Tumamoc Hill and Sentinel Peak trails out the back door; streetcar into downtown. 1BR roughly ~$900&ndash;1,300. Commute ~18&ndash;20 min. Blue: improving fast but still patchy block-to-block.'
+    },
+    {
+      name: 'Midtown (Speedway/Broadway core)', ll: [32.2330, -110.9020], rad: 2200, fit: 'green', cm: 3.5,
+      s: { jazz: 2, music: 2.5, night: 2, climb: 3.5, hike: 2.5, ypro: 3, rest: 3.5, gym: 4 },
+      txt: 'Tucson’s big affordable middle — garden apartments and small complexes along the Speedway/Broadway corridors, close to everything by car. 1BR roughly ~$800&ndash;1,100, the best value on the map. 20&ndash;25 min to Raytheon via Alvernon or Kino south.'
+    },
+    {
+      name: 'East side (Broadway/Wilmot–Kolb)', ll: [32.2210, -110.8480], rad: 2500, fit: 'blue', cm: 3.5,
+      s: { jazz: 1, music: 1.5, night: 1.5, climb: 3.5, hike: 3.5, ypro: 2.5, rest: 3, gym: 4 },
+      txt: 'Suburban-style apartment corridors with plenty of inventory and decent prices (1BR ~$850&ndash;1,200). The BLOC climbing gym (Tanque Verde Rd) and the Catalina Hwy up Mount Lemmon are closest from here. Commute is a reasonable 20&ndash;25 min down Kolb/Golf Links. Solid practical option, modest on walkable lifestyle.'
+    },
+    {
+      name: 'Rita Ranch', ll: [32.1350, -110.7770], rad: 2500, fit: 'green', cm: 4.5,
+      s: { jazz: 0.5, music: 1, night: 1, climb: 2, hike: 3.5, ypro: 3, rest: 2, gym: 3.5 },
+      txt: 'Newer master-planned area on the far southeast side — heavily populated by Raytheon and Davis-Monthan people for a reason: ~15 min straight up Valencia/Rita Rd to the plant. Newer complexes run ~$1,300&ndash;1,800 for a 1BR. Quiet and suburban; live music or jazz means a 25&ndash;30 min drive downtown.'
+    },
+    {
+      name: 'Civano', ll: [32.1640, -110.7740], rad: 1300, fit: 'blue', cm: 4,
+      s: { jazz: 0.5, music: 1, night: 0.5, climb: 2, hike: 4, ypro: 2, rest: 2, gym: 3 },
+      txt: 'A distinctive New-Urbanist/sustainable community off Houghton — charming walkable core near the Saguaro East/Fantasy Island trail systems, but mostly owner-occupied homes; rentals are scarce and often houses (~$1,600&ndash;2,200). ~20 min commute. Blue: great if a rental appears, but limited stock and a family-oriented feel.'
+    },
+    {
+      name: 'Vail', ll: [32.0480, -110.7120], rad: 3200, fit: 'blue', cm: 3.5,
+      s: { jazz: 0, music: 0.5, night: 0.5, climb: 2, hike: 4, ypro: 1.5, rest: 1.5, gym: 2.5 },
+      txt: 'Fast-growing suburb southeast of Rita Ranch, top-rated schools, almost entirely single-family homes — house rentals ~$1,600&ndash;2,100, very few apartments. Good Rincon-foothills hiking (Colossal Cave, Cienega Creek). Commute ~25 min via I-10/Rita Rd. Blue: fine commute, but a family suburb with little for a single young professional.'
+    },
+    {
+      name: 'Sahuarita', ll: [31.9575, -110.9560], rad: 3200, fit: 'blue', cm: 4,
+      s: { jazz: 0.5, music: 1, night: 1, climb: 1.5, hike: 3, ypro: 2, rest: 2, gym: 3 },
+      txt: 'Newer planned community ~15&ndash;20 min straight down I-19 — one of the easiest commutes on the map. Clean and safe with lake-park amenities and Madera Canyon hiking a half hour south; 1BR/small rentals roughly ~$1,300&ndash;1,700 but mostly houses and a strongly family-oriented vibe. Blue: commute great, social scene thin.'
+    },
+    {
+      name: 'Green Valley', ll: [31.8540, -110.9940], rad: 3800, fit: 'gray', cm: 2.5,
+      s: { jazz: 1, music: 0.5, night: 0.5, climb: 1.5, hike: 3.5, ypro: 0, rest: 2, gym: 3 },
+      txt: 'Largely a 55+ retirement community 25&ndash;30 min south on I-19. Rents are moderate (1BR ~$1,200&ndash;1,400) but the demographic skews decades older — a poor lifestyle match for a young engineer regardless of commute.'
+    },
+    {
+      name: 'South Tucson (city)', ll: [32.1960, -110.9680], rad: 900, fit: 'orange', cm: 5,
+      s: { jazz: 2, music: 2.5, night: 1.5, climb: 3.5, hike: 2.5, ypro: 2, rest: 4.5, gym: 3 },
+      txt: 'A separate one-square-mile city famous for its Mexican food corridor on S 4th Ave; Hotel McCoy’s music/art events are just across I-10. Very cheap (1BR ~$700&ndash;1,000) and only ~10&ndash;12 min from the plant, but rental quality is inconsistent and crime rates run higher than the metro average. Marginal: cheapest close-in option, look building-by-building.'
+    },
+    {
+      name: 'Catalina Foothills', ll: [32.2980, -110.9180], rad: 3200, fit: 'orange', cm: 1.5,
+      s: { jazz: 2.5, music: 1.5, night: 2, climb: 4, hike: 5, ypro: 2, rest: 4, gym: 4 },
+      txt: 'Upscale desert-view living on the north side — resort-style complexes near La Encantada, the best trailhead access in the metro (Sabino Canyon, Finger Rock), and regular resort jazz/live-music nights (e.g., Hacienda del Sol). 1BR roughly ~$1,400&ndash;2,000+. The catch: 35&ndash;45 min diagonally across the whole city in traffic.'
+    },
+    {
+      name: 'Oro Valley', ll: [32.3910, -110.9660], rad: 3800, fit: 'gray', cm: 1,
+      s: { jazz: 1, music: 1, night: 1, climb: 2.5, hike: 5, ypro: 1.5, rest: 3, gym: 4 },
+      txt: 'Well-kept suburb in the far northwest with newer complexes (1BR ~$1,500&ndash;1,900), Catalina State Park hiking, and an older, family/retiree demographic. 40&ndash;50 min to the Raytheon campus — the commute alone effectively rules it out.'
+    }
+  ];
+
+  // ---- Scoring model ----
+  // No toggles on  -> baseline (preliminary) fit color.
+  // Toggles on     -> combined = 65% avg(checked dimensions) + 35% commute score,
+  //                   mapped to tiers; a neighborhood can rise at most ONE tier
+  //                   above its baseline (safety / rental-supply / demographic
+  //                   factors don't disappear when you toggle).
+  var active = {};
+  DIMS.forEach(function (d) { active[d.key] = false; });
+
+  function activeKeys() {
+    return DIMS.map(function (d) { return d.key; }).filter(function (k) { return active[k]; });
+  }
+  function combinedScore(h) {
+    var keys = activeKeys();
+    if (!keys.length) return null;
+    var sum = 0;
+    keys.forEach(function (k) { sum += h.s[k]; });
+    return 0.65 * (sum / keys.length) + 0.35 * h.cm;
+  }
+  function scoreTier(score) {
+    if (score >= 3.5) return 3;      // green
+    if (score >= 2.6) return 2;      // blue
+    if (score >= 2.0) return 1;      // orange
+    return 0;                        // gray
+  }
+  function currentTierName(h) {
+    var sc = combinedScore(h);
+    if (sc === null) return h.fit;
+    var dyn = scoreTier(sc);
+    var base = TIERS.indexOf(h.fit);
+    return TIERS[Math.min(dyn, base + 1)];   // cap: max one tier above baseline
+  }
+
+  function buildPopup(h) {
+    var tier = currentTierName(h);
+    var f = FIT[tier];
+    var sc = combinedScore(h);
+    var html = '<b class="hood">' + h.name + '</b>' +
+      '<span class="fit-tag" style="background:' + f.color + '">' + f.name + '</span>' +
+      '<br>' + h.txt;
+    html += '<table class="scores">';
+    DIMS.forEach(function (d) {
+      var on = active[d.key];
+      html += '<tr><td class="' + (on ? 'on' : '') + '">' + (on ? '&#10003; ' : '') +
+              d.label.split(' (')[0] + '</td><td class="num ' + (on ? 'on' : '') + '">' +
+              h.s[d.key].toFixed(1) + '/5</td></tr>';
+    });
+    html += '</table>';
+    if (sc !== null) {
+      html += '<div style="margin-top:5px;font-size:12px"><b>Combined score: ' + sc.toFixed(2) +
+              '</b> <span style="color:#777">(65% checked factors + 35% commute)</span></div>';
+    }
+    html += '<br><span style="color:#888;font-size:11px">Rents: approx. 2025&ndash;26 listing averages ' +
+            '(Apartments.com / RentCafe / Zumper / ApartmentList). Preliminary rating.</span>';
+    return html;
+  }
+
+  var circles = [];
+  hoods.forEach(function (h) {
+    var f = FIT[h.fit];
+    var c = L.circle(h.ll, {
+      radius: h.rad,
+      color: f.color, weight: 2, opacity: 0.9,
+      fillColor: f.color, fillOpacity: 0.22
+    }).addTo(map);
+    c.bindTooltip(h.name, { permanent: true, direction: 'center', className: 'hood-label' });
+    c.bindPopup(function () { return buildPopup(h); }, { maxWidth: 340 });
+    circles.push({ hood: h, circle: c });
+  });
+
+  function recolor() {
+    circles.forEach(function (e) {
+      var f = FIT[currentTierName(e.hood)];
+      e.circle.setStyle({ color: f.color, fillColor: f.color });
+    });
+  }
+
+  // ---- Title (top-left, under zoom) ----
+  var titleCtl = L.control({ position: 'topleft' });
+  titleCtl.onAdd = function () {
+    var d = L.DomUtil.create('div', 'title-box');
+    d.innerHTML = 'Tucson Neighborhood Finder &mdash; Raytheon Airport Campus' +
+                  '<div class="sub">Commute rings + preliminary neighborhood fit for a young RTX engineer</div>';
+    return d;
+  };
+  titleCtl.addTo(map);
+
+  // ---- Toggle panel (top-right) ----
+  var toggleCtl = L.control({ position: 'topright' });
+  toggleCtl.onAdd = function () {
+    var d = L.DomUtil.create('div', 'togglepanel');
+    L.DomEvent.disableClickPropagation(d);
+    L.DomEvent.disableScrollPropagation(d);
+    function cb(k) {
+      var dim = DIMS.filter(function (x) { return x.key === k; })[0];
+      return '<label><input type="checkbox" id="dim-' + k + '">' + dim.label + '</label>';
+    }
+    var html = '<h4>What matters to him? (recolors map)</h4>';
+    html += '<div class="grouphdr">Music &amp; nightlife (separate)</div>';
+    ['jazz', 'music', 'night'].forEach(function (k) { html += cb(k); });
+    html += '<div class="grouphdr">Everything else</div>';
+    ['climb', 'hike', 'ypro', 'rest', 'gym'].forEach(function (k) { html += cb(k); });
+    html += '<div class="btnrow">' +
+            '<button class="preset" id="btn-son">Son&rsquo;s preset</button>' +
+            '<button id="btn-clear">Clear all</button></div>' +
+            '<div class="note">Nothing checked = baseline preliminary colors. Checked = 65% those factors + 35% commute; ' +
+            'orange/gray baseline areas can rise at most one tier (safety, rental supply, and demographics still apply).</div>';
+    d.innerHTML = html;
+    return d;
+  };
+  toggleCtl.addTo(map);
+
+  DIMS.forEach(function (d) {
+    document.getElementById('dim-' + d.key).addEventListener('change', function (ev) {
+      active[d.key] = ev.target.checked;
+      recolor();
+      map.closePopup();
+    });
+  });
+  document.getElementById('btn-son').addEventListener('click', function () {
+    DIMS.forEach(function (d) {
+      active[d.key] = !!SON_PRESET[d.key];
+      document.getElementById('dim-' + d.key).checked = active[d.key];
+    });
+    recolor();
+    map.closePopup();
+  });
+  document.getElementById('btn-clear').addEventListener('click', function () {
+    DIMS.forEach(function (d) {
+      active[d.key] = false;
+      document.getElementById('dim-' + d.key).checked = false;
+    });
+    recolor();
+    map.closePopup();
+  });
+
+  // ---- Legend (bottom-right) ----
+  var legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function () {
+    var d = L.DomUtil.create('div', 'legend');
+    d.innerHTML =
+      '<h4>Fit for a young Raytheon engineer</h4>' +
+      '<div><span class="swatch" style="background:' + FIT.green.color  + '"></span>Green &mdash; strong candidate (commute + lifestyle)</div>' +
+      '<div><span class="swatch" style="background:' + FIT.blue.color   + '"></span>Blue &mdash; potential, depends on preferences</div>' +
+      '<div><span class="swatch" style="background:' + FIT.orange.color + '"></span>Orange &mdash; marginal</div>' +
+      '<div><span class="swatch" style="background:' + FIT.gray.color   + '"></span>Gray &mdash; likely ruled out</div>' +
+      '<div class="ringnote">&#9733; = RTX campus (1151 E Hermans Rd).<br>' +
+      'Dashed rings &asymp; 15 / 25 / 35-min drives (8 / 14 / 20 mi).<br>' +
+      'Use the checkbox panel (top right) to recolor by his priorities.</div>' +
+      '<div class="prelim">Preliminary &mdash; will refine with preferences (budget &amp; lifestyle answers still being collected).</div>';
+    return d;
+  };
+  legend.addTo(map);
+</script>
+</body>
+</html>
