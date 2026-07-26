@@ -568,7 +568,7 @@
   var minBeds = 1, maxBeds = 99, minBaths = 0, maxBaths = 99;
   var zonesOnly = true;   // default: only listings inside neighborhoods currently rating green/blue
   var catsOnly = false;   // true = require explicit cats_ok
-  var laundryReq = 'any'; // 'any' | 'onsite' (on-site or better) | 'in_unit'
+  var laundryReq = 'in_unit'; // DEFAULT per Will 2026-07-26: apts/condos must have W/D or be excluded; houses exempt
 
   // Assign each listing to the neighborhood circle it falls inside (nearest center wins on overlap)
   function assignHood(l) {
@@ -595,8 +595,10 @@
     if (ba != null && (ba < minBaths || ba > maxBaths)) return false;
     if (ba == null && minBaths > 0) return false;
     if (catsOnly && l.cats_ok !== true) return false;
-    if (laundryReq === 'in_unit' && l.laundry !== 'in_unit') return false;
-    if (laundryReq === 'onsite' && l.laundry !== 'in_unit' && l.laundry !== 'onsite') return false;
+    if (l.property_type !== 'house') {   // houses exempt: they typically have laundry/hookups, listings just omit it
+      if (laundryReq === 'in_unit' && l.laundry !== 'in_unit') return false;
+      if (laundryReq === 'onsite' && l.laundry !== 'in_unit' && l.laundry !== 'onsite') return false;
+    }
     return listingsVisible && typeOn[l.property_type] !== false &&
            !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
   }
@@ -804,9 +806,10 @@
         ' &nbsp;Baths <select id="lst-bamin"><option value="0" selected>any</option><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option></select>' +
         ' to <select id="lst-bamax"><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option><option value="99" selected>any</option></select></div>' +
         '<div style="margin-top:3px;font-size:11.5px">Laundry <select id="lst-laundry">' +
-        '<option value="any" selected>any / unknown</option>' +
+        '<option value="any">any / unknown</option>' +
         '<option value="onsite">on-site or in-unit</option>' +
-        '<option value="in_unit">in-unit only</option></select></div>' +
+        '<option value="in_unit" selected>in-unit W/D required</option></select>' +
+        ' <span style="color:#888;font-size:10.5px">(apts &amp; condos; houses assumed to have hookups)</span></div>' +
         '<div id="lst-count" style="font-size:11px;color:#555;margin-top:3px"></div>' +
         '<div style="font-size:10.5px;color:#888">Cat-friendly, $700&ndash;2,400. Follows the Max-rent slider. Click a pin &rarr; View or &#10008; Pass (with a why).</div>';
       L.DomEvent.disableClickPropagation(d2);
