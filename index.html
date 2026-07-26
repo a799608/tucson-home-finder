@@ -529,6 +529,7 @@
 
   var minBeds = 1, maxBeds = 99, minBaths = 0, maxBaths = 99;
   var zonesOnly = true;   // default: only listings inside neighborhoods currently rating green/blue
+  var catsOnly = false;   // true = require explicit cats_ok
 
   // Assign each listing to the neighborhood circle it falls inside (nearest center wins on overlap)
   function assignHood(l) {
@@ -554,9 +555,25 @@
     if (bd < minBeds || bd > maxBeds) return false;
     if (ba != null && (ba < minBaths || ba > maxBaths)) return false;
     if (ba == null && minBaths > 0) return false;
+    if (catsOnly && l.cats_ok !== true) return false;
     return listingsVisible && typeOn[l.property_type] !== false &&
            !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
   }
+
+  // Feedback sync — every Pass/Interested action also lands in the Google Sheet
+  var FEEDBACK_URL = 'https://script.google.com/macros/s/AKfycbwxVqkzWwIgknWrTB9eOrQwL5g93Tsv_-sisygySGuPRmujiarTGf7nIo9rhptyHGoc/exec';
+  function sendFeedback(action, l, extra) {
+    try {
+      var q = FEEDBACK_URL + '?token=tucson&action=' + action +
+        '&id=' + encodeURIComponent(l.id) +
+        '&price=' + encodeURIComponent(l.price || '') +
+        '&address=' + encodeURIComponent(l.address || '') +
+        '&hood=' + encodeURIComponent(l._hood ? l._hood.name : '') +
+        '&url=' + encodeURIComponent(l.url || '') + (extra || '');
+      new Image().src = q;   // fire-and-forget GET
+    } catch (e) { /* offline is fine — localStorage still has it */ }
+  }
+  function byId(id) { return listingsData.filter(function (l) { return l.id === id; })[0]; }
 
   var interested = {};
   try { interested = JSON.parse(localStorage.getItem('interestedListings') || '{}'); } catch (e) {}
@@ -564,9 +581,12 @@
   function saveInterested() { localStorage.setItem('interestedListings', JSON.stringify(interested)); }
 
   window._toggleInterest = function (id) {
+    var turningOn = !interested[id];
     if (interested[id]) { delete interested[id]; }
     else { interested[id] = { when: new Date().toISOString() }; }
     saveInterested();
+    var l = byId(id);
+    if (l) sendFeedback('interest', l, '&state=' + (turningOn ? 'on' : 'off'));
     map.closePopup();
     rebuildListings();
   };
@@ -616,6 +636,8 @@
     var reason = window.prompt('Pass on this one — why? (optional; helps tune his preferences)') || '';
     hiddenIds[id] = { when: new Date().toISOString(), reason: reason };
     localStorage.setItem('rejectedListings', JSON.stringify(hiddenIds));
+    var l = byId(id);
+    if (l) sendFeedback('reject', l, '&reason=' + encodeURIComponent(reason));
     map.closePopup();
     rebuildListings();
   };
@@ -640,7 +662,9 @@
          (l.sqft ? ' &middot; ' + l.sqft.toLocaleString() + ' sqft' : '') + '</span></div>';
     h += '<div style="color:#333">' + esc(l.title) + '</div>';
     h += '<div style="color:#666">' + esc(l.address) + '</div>';
-    h += '<div style="color:#666;text-transform:capitalize">' + esc(l.property_type) + ' &middot; ' + esc(l.pets_note || 'pets: see listing') + '</div>';
+    h += '<div style="color:#666;text-transform:capitalize">' + esc(l.property_type) + ' &middot; ' +
+         (l.cats_ok === true ? '<span style="color:#1e8a3c;font-weight:600">cats OK</span>' : esc(l.pets_note || 'pets: ask (not stated)')) + '</div>';
+    if (l.utilities_note) h += '<div style="color:#666">Utilities: ' + esc(l.utilities_note) + '</div>';
     if (l.contact_phone) {
       h += '<div style="color:#333;font-weight:600">&#9742; ' + (l.contact_name ? esc(l.contact_name) + ' &middot; ' : '') +
            '<a href="tel:' + esc(l.contact_phone) + '">' + esc(l.contact_phone) + '</a></div>';
@@ -728,6 +752,7 @@
       d2.innerHTML = '<h4 style="margin:0 0 4px">Current rental listings</h4>' +
         '<label style="display:block"><input type="checkbox" id="lst-on" checked> Show listings</label>' +
         '<label style="display:block"><input type="checkbox" id="lst-zones" checked> Only his green/blue zones</label>' +
+        '<label style="display:block"><input type="checkbox" id="lst-cats"> Cats confirmed only</label>' +
         '<label style="margin-right:6px"><input type="checkbox" id="lst-apartment" checked> <span style="color:' + TYPE_COLOR.apartment + '">&#9679;</span> Apt</label>' +
         '<label style="margin-right:6px"><input type="checkbox" id="lst-house" checked> <span style="color:' + TYPE_COLOR.house + '">&#9679;</span> House</label>' +
         '<label><input type="checkbox" id="lst-condo" checked> <span style="color:' + TYPE_COLOR.condo + '">&#9679;</span> Condo</label>' +
@@ -760,6 +785,7 @@
 
     document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
     document.getElementById('lst-zones').addEventListener('change', function (ev) { zonesOnly = ev.target.checked; selectedHood = null; rebuildListings(); });
+    document.getElementById('lst-cats').addEventListener('change', function (ev) { catsOnly = ev.target.checked; rebuildListings(); });
     ['apartment', 'house', 'condo'].forEach(function (t) {
       document.getElementById('lst-' + t).addEventListener('change', function (ev) { typeOn[t] = ev.target.checked; rebuildListings(); });
     });
