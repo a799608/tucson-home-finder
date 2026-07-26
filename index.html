@@ -568,6 +568,7 @@
   var minBeds = 1, maxBeds = 99, minBaths = 0, maxBaths = 99;
   var zonesOnly = true;   // default: only listings inside neighborhoods currently rating green/blue
   var catsOnly = false;   // true = require explicit cats_ok
+  var laundryReq = 'any'; // 'any' | 'onsite' (on-site or better) | 'in_unit'
 
   // Assign each listing to the neighborhood circle it falls inside (nearest center wins on overlap)
   function assignHood(l) {
@@ -594,6 +595,8 @@
     if (ba != null && (ba < minBaths || ba > maxBaths)) return false;
     if (ba == null && minBaths > 0) return false;
     if (catsOnly && l.cats_ok !== true) return false;
+    if (laundryReq === 'in_unit' && l.laundry !== 'in_unit') return false;
+    if (laundryReq === 'onsite' && l.laundry !== 'in_unit' && l.laundry !== 'onsite') return false;
     return listingsVisible && typeOn[l.property_type] !== false &&
            !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
   }
@@ -703,6 +706,7 @@
     h += '<div style="color:#666;text-transform:capitalize">' + esc(l.property_type) + ' &middot; ' +
          (l.cats_ok === true ? '<span style="color:#1e8a3c;font-weight:600">cats OK</span>' : esc(l.pets_note || 'pets: ask (not stated)')) + '</div>';
     if (l.utilities_note) h += '<div style="color:#666">Utilities: ' + esc(l.utilities_note) + '</div>';
+    if (l.laundry) h += '<div style="color:#666">Laundry: ' + (l.laundry === 'in_unit' ? 'in unit' : 'on-site facility') + '</div>';
     if (l.contact_phone) {
       h += '<div style="color:#333;font-weight:600">&#9742; ' + (l.contact_name ? esc(l.contact_name) + ' &middot; ' : '') +
            '<a href="tel:' + esc(l.contact_phone) + '">' + esc(l.contact_phone) + '</a></div>';
@@ -799,6 +803,10 @@
         ' to <select id="lst-bdmax"><option value="1">1</option><option value="2">2</option><option value="99" selected>3+</option></select>' +
         ' &nbsp;Baths <select id="lst-bamin"><option value="0" selected>any</option><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option></select>' +
         ' to <select id="lst-bamax"><option value="1">1</option><option value="1.5">1.5</option><option value="2">2</option><option value="99" selected>any</option></select></div>' +
+        '<div style="margin-top:3px;font-size:11.5px">Laundry <select id="lst-laundry">' +
+        '<option value="any" selected>any / unknown</option>' +
+        '<option value="onsite">on-site or in-unit</option>' +
+        '<option value="in_unit">in-unit only</option></select></div>' +
         '<div id="lst-count" style="font-size:11px;color:#555;margin-top:3px"></div>' +
         '<div style="font-size:10.5px;color:#888">Cat-friendly, $700&ndash;2,400. Follows the Max-rent slider. Click a pin &rarr; View or &#10008; Pass (with a why).</div>';
       L.DomEvent.disableClickPropagation(d2);
@@ -824,6 +832,7 @@
     document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
     document.getElementById('lst-zones').addEventListener('change', function (ev) { zonesOnly = ev.target.checked; selectedHood = null; rebuildListings(); });
     document.getElementById('lst-cats').addEventListener('change', function (ev) { catsOnly = ev.target.checked; rebuildListings(); });
+    document.getElementById('lst-laundry').addEventListener('change', function (ev) { laundryReq = ev.target.value; rebuildListings(); });
     ['apartment', 'house', 'condo'].forEach(function (t) {
       document.getElementById('lst-' + t).addEventListener('change', function (ev) { typeOn[t] = ev.target.checked; rebuildListings(); });
     });
