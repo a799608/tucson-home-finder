@@ -124,11 +124,39 @@
                '1151 E Hermans Rd — main Tucson campus on the south side of Tucson International Airport. ' +
                'All commute rings on this map are centered here.');
 
-  // ---- Commute rings (radius approximations of drive time) ----
+  // ---- Measured rush-hour drive times (minutes; flexible window: arrive 8-9a, leave 5-6p) ----
+  // null until the measurement pass is embedded; when set, overrides judgment commute scores
+  // and replaces the distance rings.
+  // Measured 2026-07-26 via Google Maps depart-at, Mon Jul 27 predicted traffic.
+  // Flex schedule: best of depart 8:00/8:30a inbound, best of 5:00/5:45p outbound; worse direction shown.
+  var RUSH = {
+    'Downtown / 4th Ave': 28,
+    'Armory Park': 28,
+    'Barrio Viejo': 24,
+    'University / West University': 31,
+    'Sam Hughes': 31,
+    'Menlo Park / Mercado': 24,
+    'Midtown (Speedway/Broadway core)': 35,
+    'East side (Broadway/Wilmot–Kolb)': 38,
+    'Rita Ranch': 36,
+    'Civano': 36,
+    'Vail': 33,
+    'Sahuarita': 21,
+    'Green Valley': 31,
+    'South Tucson (city)': 22,
+    'Catalina Foothills': 43,
+    'Oro Valley': 50
+  };
+  function minutesToScore(m) {
+    return m <= 15 ? 5 : m <= 22 ? 4 : m <= 30 ? 3 : m <= 40 ? 2 : m <= 50 ? 1 : 0.5;
+  }
+
+  // ---- Commute rings (radius approximations of drive time; hidden once RUSH is measured) ----
   var MI = 1609.34;
+  (RUSH ? [] :
   [{ r: 8,  label: '~15 min drive (≈8 mi)' },
    { r: 14, label: '~25 min drive (≈14 mi)' },
-   { r: 20, label: '~35 min drive (≈20 mi)' }].forEach(function (ring) {
+   { r: 20, label: '~35 min drive (≈20 mi)' }]).forEach(function (ring) {
     L.circle(RTX, {
       radius: ring.r * MI,
       color: '#8a6d1f', weight: 1.5, dashArray: '6 6',
@@ -351,6 +379,10 @@
       html += '<span class="ob-tag">Over budget</span>';
     }
     html += '<br>' + h.txt;
+    if (h.rush != null) {
+      html += '<div style="margin-top:5px;font-size:12px;color:#0b5d1e"><b>&#128663; ~' + h.rush +
+              ' min at rush hour</b> (measured; flexible window: arrive 8&ndash;9a, leave 5&ndash;6p)</div>';
+    }
     html += '<div style="margin-top:5px;font-size:12px">Typical 1BR midpoint: <b>$' + h.rentMid.toLocaleString() + '</b>' +
             (overBudget(h) ? ' — <b>above your $' + maxRent.toLocaleString() + ' max</b>, so it is grayed out.' : '') + '</div>';
     var keys = activeKeys();
@@ -377,6 +409,10 @@
     return html;
   }
 
+  if (RUSH) hoods.forEach(function (h) {
+    if (RUSH[h.name] != null) { h.rush = RUSH[h.name]; h.cm = minutesToScore(h.rush); }
+  });
+
   var circles = [];
   hoods.forEach(function (h) {
     var f = FIT[h.fit];
@@ -385,7 +421,8 @@
       color: f.color, weight: 2, opacity: 0.9,
       fillColor: f.color, fillOpacity: 0.22
     }).addTo(map);
-    c.bindTooltip(h.name, { permanent: true, direction: 'center', className: 'hood-label' });
+    c.bindTooltip(h.rush != null ? h.name + ' · ' + h.rush + "'" : h.name,
+                  { permanent: true, direction: 'center', className: 'hood-label' });
     c.bindPopup(function () { return buildPopup(h); }, { maxWidth: 340 });
     circles.push({ hood: h, circle: c });
   });
@@ -504,7 +541,8 @@
       '<div><span class="swatch" style="background:' + FIT.orange.color + '"></span>Orange &mdash; marginal</div>' +
       '<div><span class="swatch" style="background:' + FIT.gray.color   + '"></span>Gray &mdash; likely ruled out / over budget</div>' +
       '<div class="ringnote">&#9733; = RTX campus (1151 E Hermans Rd).<br>' +
-      'Dashed rings &asymp; 15 / 25 / 35-min drives (8 / 14 / 20 mi).<br>' +
+      (RUSH ? 'Neighborhood labels show <b>measured rush-hour minutes</b> to the plant<br>(flexible schedule: arrive 8&ndash;9a, leave 5&ndash;6p; worse direction shown).<br>'
+            : 'Dashed rings &asymp; 15 / 25 / 35-min drives (8 / 14 / 20 mi).<br>') +
       'Use the panel (top right) to recolor by his priorities.</div>' +
       '<div class="prelim">Preliminary &mdash; will refine with preferences (budget &amp; lifestyle answers still being collected).</div>';
     return d;

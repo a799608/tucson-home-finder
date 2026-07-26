@@ -1,0 +1,23 @@
+{
+  "method": "Google Maps directions URLs with depart-at (!8j local-epoch), Monday Jul 27 2026, reading the 'typically X-Y min' range on the recommended (first-listed) route. Four lookups per neighborhood: hood->plant depart 8:00 AM and 8:30 AM; plant->hood depart 5:00 PM and 5:45 PM. best_am / best_pm = min of the two range MIDPOINTS in that direction (flexible schedule, worker picks the better slot); final_minutes = max(best_am, best_pm) rounded half-up. Plant: Raytheon, 1151 E Hermans Rd, Tucson AZ 85756 (32.1051,-110.9456). All 64 lookups succeeded; no nulls.",
+  "measured": "2026-07-26",
+  "rows": [
+    { "neighborhood": "Downtown/4th Ave",           "am800": [18,35], "am830": [18,30], "pm500": [20,35], "pm545": [20,35], "best_am": 24.0, "best_pm": 27.5, "final_minutes": 28 },
+    { "neighborhood": "Armory Park",                "am800": [18,30], "am830": [18,30], "pm500": [20,35], "pm545": [20,35], "best_am": 24.0, "best_pm": 27.5, "final_minutes": 28 },
+    { "neighborhood": "Barrio Viejo",               "am800": [18,30], "am830": [18,28], "pm500": [18,35], "pm545": [18,30], "best_am": 23.0, "best_pm": 24.0, "final_minutes": 24 },
+    { "neighborhood": "University/West University", "am800": [20,40], "am830": [20,40], "pm500": [22,40], "pm545": [22,40], "best_am": 30.0, "best_pm": 31.0, "final_minutes": 31 },
+    { "neighborhood": "Sam Hughes",                 "am800": [22,40], "am830": [22,40], "pm500": [24,40], "pm545": [22,40], "best_am": 31.0, "best_pm": 31.0, "final_minutes": 31 },
+    { "neighborhood": "Menlo Park/Mercado",         "am800": [18,30], "am830": [18,28], "pm500": [18,30], "pm545": [18,30], "best_am": 23.0, "best_pm": 24.0, "final_minutes": 24 },
+    { "neighborhood": "Midtown",                    "am800": [24,45], "am830": [24,45], "pm500": [24,40], "pm545": [24,35], "best_am": 34.5, "best_pm": 29.5, "final_minutes": 35 },
+    { "neighborhood": "East side (Wilmot-Kolb)",    "am800": [26,50], "am830": [26,50], "pm500": [24,45], "pm545": [24,45], "best_am": 38.0, "best_pm": 34.5, "final_minutes": 38 },
+    { "neighborhood": "Rita Ranch",                 "am800": [26,45], "am830": [26,45], "pm500": [26,45], "pm545": [26,40], "best_am": 35.5, "best_pm": 33.0, "final_minutes": 36 },
+    { "neighborhood": "Civano",                     "am800": [26,50], "am830": [26,45], "pm500": [26,40], "pm545": [26,40], "best_am": 35.5, "best_pm": 33.0, "final_minutes": 36 },
+    { "neighborhood": "Vail",                       "am800": [26,45], "am830": [26,40], "pm500": [24,35], "pm545": [24,35], "best_am": 33.0, "best_pm": 29.5, "final_minutes": 33 },
+    { "neighborhood": "Sahuarita",                  "am800": [18,24], "am830": [18,24], "pm500": [16,22], "pm545": [16,22], "best_am": 21.0, "best_pm": 19.0, "final_minutes": 21 },
+    { "neighborhood": "Green Valley",               "am800": [26,35], "am830": [28,28], "pm500": [26,35], "pm545": [26,35], "best_am": 28.0, "best_pm": 30.5, "final_minutes": 31 },
+    { "neighborhood": "South Tucson",               "am800": [18,28], "am830": [18,26], "pm500": [16,28], "pm545": [16,28], "best_am": 22.0, "best_pm": 22.0, "final_minutes": 22 },
+    { "neighborhood": "Catalina Foothills",         "am800": [30,60], "am830": [30,55], "pm500": [35,60], "pm545": [30,55], "best_am": 42.5, "best_pm": 42.5, "final_minutes": 43 },
+    { "neighborhood": "Oro Valley",                 "am800": [35,60], "am830": [35,60], "pm500": [35,70], "pm545": [35,65], "best_am": 47.5, "best_pm": 50.0, "final_minutes": 50 }
+  ],
+  "notes": "Green Valley am830 showed a single value 'typically 28 min' (no range) -> recorded [28,28]. Ranges expressed in minutes; 'X min to 1 hr Y min' converted (e.g. '35 min to 1 hr 10 min' -> [35,70]). Depart-at epochs (local wall-clock as UTC): 8:00 AM=1785139200, 8:30 AM=1785141000, 5:00 PM=1785171600, 5:45 PM=1785174300; page confirmed 'Depart at Mon, Jul 27' with matching arrive-around times on every lookup."
+}
