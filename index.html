@@ -46,17 +46,24 @@
   }
   .legend .ringnote { font-size: 11.5px; color: #555; margin-top: 6px; }
 
-  .togglepanel { max-width: 280px; }
-  .togglepanel label { display: block; font-size: 12.5px; cursor: pointer; margin: 2px 0; }
-  .togglepanel input { vertical-align: -2px; margin-right: 6px; }
+  .togglepanel { width: 302px; max-height: 86vh; overflow-y: auto; }
+  .togglepanel label.tgl { display: block; font-size: 12px; cursor: pointer; margin: 1px 0; }
+  .togglepanel input[type=checkbox] { vertical-align: -2px; margin-right: 6px; }
   .togglepanel .btnrow { margin-top: 8px; }
   .togglepanel button {
     font-size: 12px; padding: 4px 10px; margin-right: 6px; cursor: pointer;
     border: 1px solid #999; border-radius: 5px; background: #f4f4f4;
   }
   .togglepanel button.preset { background: #1e8a3c; color: #fff; border-color: #157030; font-weight: 600; }
-  .togglepanel .note { font-size: 11px; color: #666; margin-top: 7px; border-top: 1px solid #ddd; padding-top: 5px; }
-  .togglepanel .grouphdr { font-size: 11px; font-weight: 700; color: #555; margin-top: 6px; text-transform: uppercase; letter-spacing: .4px; }
+  .togglepanel .note { font-size: 10.5px; color: #666; margin-top: 7px; border-top: 1px solid #ddd; padding-top: 5px; }
+  .togglepanel .grouphdr { font-size: 11px; font-weight: 700; color: #555; margin-top: 7px; text-transform: uppercase; letter-spacing: .5px; }
+  .togglepanel .sliderrow { margin-top: 8px; font-size: 12px; }
+  .togglepanel .sliderrow input[type=range] { width: 100%; margin: 2px 0 0; }
+  .togglepanel .sliderrow .val { font-weight: 700; }
+  .togglepanel #ranklist { margin: 6px 0 0; padding-left: 22px; font-size: 12px; max-height: 170px; overflow-y: auto; }
+  .togglepanel #ranklist li { margin: 0; line-height: 1.45; }
+  .togglepanel #ranklist .sc { color: #666; }
+  .togglepanel #ranklist .ob { color: #999; font-style: italic; }
 
   .rtx-icon {
     font-size: 26px; line-height: 26px; text-align: center;
@@ -76,9 +83,10 @@
   .leaflet-popup-content b.hood { font-size: 14px; }
   .fit-tag { display: inline-block; padding: 1px 7px; border-radius: 9px;
              font-size: 11px; font-weight: 700; color: #fff; margin-left: 4px; }
+  .ob-tag { display: inline-block; padding: 1px 7px; border-radius: 9px;
+            font-size: 11px; font-weight: 700; color: #fff; background: #7a7a7a; margin-left: 4px; }
   table.scores { border-collapse: collapse; margin-top: 6px; font-size: 11.5px; }
-  table.scores td { padding: 0 8px 0 0; color: #555; }
-  table.scores td.on { color: #111; font-weight: 600; }
+  table.scores td { padding: 0 8px 0 0; color: #111; font-weight: 600; }
   table.scores td.num { text-align: right; }
 </style>
 </head>
@@ -87,7 +95,6 @@
 <script>
   // ---------------------------------------------------------------
   // Raytheon (RTX) Missiles & Defense HQ — 1151 E Hermans Rd, Tucson
-  // (adjacent to Tucson International Airport, south side)
   // ---------------------------------------------------------------
   var RTX = [32.1051, -110.9456];
 
@@ -117,7 +124,7 @@
       color: '#8a6d1f', weight: 1.5, dashArray: '6 6',
       fill: true, fillColor: '#c9a227', fillOpacity: 0.03
     }).addTo(map);
-    var labelLat = RTX[0] + ring.r / 69.05;   // 1 deg lat ~ 69 mi
+    var labelLat = RTX[0] + ring.r / 69.05;
     L.marker([labelLat, RTX[1]], {
       icon: L.divIcon({ className: 'ring-label', html: ring.label, iconSize: [150, 14], iconAnchor: [75, 7] }),
       interactive: false
@@ -133,137 +140,195 @@
     gray:   { color: '#7a7a7a', name: 'Likely ruled out' }
   };
 
-  // ---- Lifestyle dimensions (all scores 0-5) ----
+  // ---- Lifestyle dimensions (all scores 0-5), grouped for the panel ----
   var DIMS = [
-    { key: 'jazz',  label: 'Live jazz (Century Room / Jazz Fest)' },
-    { key: 'music', label: 'Live music venues (Rialto, Fox, 191 Toole)' },
-    { key: 'night', label: 'Bar/club nightlife (4th Ave / University)' },
-    { key: 'climb', label: 'Rock climbing (Rocks & Ropes, BLOC, Mt Lemmon)' },
-    { key: 'hike',  label: 'Hiking access' },
-    { key: 'ypro',  label: 'Young-professional crowd' },
-    { key: 'rest',  label: 'Restaurants' },
-    { key: 'gym',   label: 'Gym access' }
+    // SCENE
+    { key: 'jazz',    grp: 'scene',     label: 'Live jazz (Century Room / Jazz Fest)' },
+    { key: 'music',   grp: 'scene',     label: 'Live music venues (Rialto, Fox, 191 Toole)' },
+    { key: 'night',   grp: 'scene',     label: 'Bar/club nightlife (4th Ave / University)' },
+    { key: 'rest',    grp: 'scene',     label: 'Restaurants & coffee' },
+    { key: 'ypro',    grp: 'scene',     label: 'Young-professional crowd' },
+    { key: 'hist',    grp: 'scene',     label: 'Historic character' },
+    { key: 'walk',    grp: 'scene',     label: 'Walkable streets' },
+    { key: 'quiet',   grp: 'scene',     label: 'Quiet residential' },
+    // ACTIVE
+    { key: 'climb',   grp: 'active',    label: 'Rock climbing (Rocks & Ropes, BLOC, Lemmon)' },
+    { key: 'hike',    grp: 'active',    label: 'Hiking access' },
+    { key: 'bike',    grp: 'active',    label: 'Road/mountain biking' },
+    { key: 'gym',     grp: 'active',    label: 'Gym access' },
+    { key: 'pool',    grp: 'active',    label: 'Community pool access' },
+    // PRACTICAL
+    { key: 'groc',    grp: 'practical', label: 'Grocery convenience' },
+    { key: 'newc',    grp: 'practical', label: 'New construction' },
+    { key: 'safe',    grp: 'practical', label: 'Safety priority' },
+    { key: 'cat',     grp: 'practical', label: 'Cat-friendly rental stock' },
+    { key: 'transit', grp: 'practical', label: 'Public transit / Sun Link streetcar' }
   ];
-  // Son's preset: jazz ON, live music ON, nightlife OFF, plus climb/hike/ypro/rest/gym
-  var SON_PRESET = { jazz: true, music: true, night: false, climb: true, hike: true, ypro: true, rest: true, gym: true };
+  var GROUPS = [
+    { id: 'scene',     title: 'Scene' },
+    { id: 'active',    title: 'Active' },
+    { id: 'practical', title: 'Practical' }
+  ];
+  // Son's preset: jazz+music ON, nightlife OFF, climb/hike/ypro/rest/gym ON, all others OFF.
+  var SON_PRESET = { jazz: true, music: true, climb: true, hike: true, ypro: true, rest: true, gym: true };
+  var PRESET_RENT = 1850, PRESET_CW = 35;
 
   // ---- Neighborhoods ----
-  // fit = preliminary (baseline) rating; s = per-dimension scores 0-5;
-  // cm = commute score 0-5 (5 = shortest drive to RTX). rad = display radius (m).
+  // fit = preliminary baseline; s = 18 dimension scores 0-5; cm = commute score 0-5
+  // (judgment-based pending measured rush-hour times); rentMid = typical 1BR midpoint ($).
   var hoods = [
     {
-      name: 'Downtown / 4th Ave', ll: [32.2225, -110.9680], rad: 1400, fit: 'green', cm: 4,
-      s: { jazz: 5, music: 5, night: 5, climb: 5, hike: 3, ypro: 5, rest: 5, gym: 4 },
-      txt: 'The center of Tucson nightlife and its live-music row: Rialto Theatre, Fox Theatre, 191 Toole, Club Congress — and the Century Room jazz club inside Hotel Congress (the Tucson Jazz Festival runs downtown every January). Rocks &amp; Ropes climbing gym is on S Toole Ave. 1BR runs roughly ~$1,100&ndash;1,700. Reverse commute straight south on I-10/Benson Hwy, about 15&ndash;20 min.'
+      name: 'Downtown / 4th Ave', ll: [32.2225, -110.9680], rad: 1400, fit: 'green', cm: 4, rentMid: 1400,
+      s: { jazz:5, music:5, night:5, rest:5, ypro:5, hist:4, walk:5, quiet:1.5,
+           climb:5, hike:3, bike:3.5, gym:4, pool:2.5,
+           groc:2.5, newc:4, safe:2.5, cat:2.5, transit:5 },
+      txt: 'The center of Tucson nightlife and its live-music row: Rialto Theatre, Fox Theatre, 191 Toole, Club Congress — and the Century Room jazz club inside Hotel Congress (the Tucson Jazz Festival runs downtown every January). Rocks &amp; Ropes climbing gym is on S Toole Ave; the Sun Link streetcar runs through. 1BR runs roughly ~$1,100&ndash;1,700. Reverse commute straight south on I-10/Benson Hwy, about 15&ndash;20 min.'
     },
     {
-      name: 'Armory Park', ll: [32.2145, -110.9660], rad: 900, fit: 'green', cm: 4,
-      s: { jazz: 5, music: 5, night: 4, climb: 4.5, hike: 3, ypro: 4.5, rest: 4.5, gym: 4 },
-      txt: 'Historic, walkable district on the south edge of downtown — adobe row houses and Victorians, ranked among Tucson’s best areas for young professionals. Ten-minute walk to the Century Room jazz club and the downtown venue row. 1BR roughly ~$1,100&ndash;1,400. One of the shortest quality-of-life commutes on the map: ~15 min south to the plant.'
+      name: 'Armory Park', ll: [32.2145, -110.9660], rad: 900, fit: 'green', cm: 4, rentMid: 1250,
+      s: { jazz:5, music:5, night:4, rest:4.5, ypro:4.5, hist:5, walk:5, quiet:3,
+           climb:4.5, hike:3, bike:3.5, gym:4, pool:2.5,
+           groc:2.5, newc:2, safe:3, cat:4.5, transit:4 },
+      txt: 'Historic, walkable district on the south edge of downtown — adobe row houses and Victorians, ranked among Tucson’s best areas for young professionals. Ten-minute walk to the Century Room jazz club and the downtown venue row; lots of casita/private-landlord rentals. 1BR roughly ~$1,100&ndash;1,400. One of the shortest quality-of-life commutes on the map: ~15 min south to the plant.'
     },
     {
-      name: 'Barrio Viejo', ll: [32.2120, -110.9720], rad: 700, fit: 'blue', cm: 4,
-      s: { jazz: 4, music: 4, night: 4, climb: 4, hike: 3, ypro: 4, rest: 4, gym: 3.5 },
+      name: 'Barrio Viejo', ll: [32.2120, -110.9720], rad: 700, fit: 'blue', cm: 4, rentMid: 1500,
+      s: { jazz:4, music:4, night:4, rest:4, ypro:4, hist:5, walk:4.5, quiet:3.5,
+           climb:4, hike:3, bike:3.5, gym:3.5, pool:2,
+           groc:2.5, newc:1.5, safe:3, cat:4.5, transit:3.5 },
       txt: 'Tucson’s most photogenic neighborhood — colorful 19th-century adobes just south of downtown, an easy walk/bike to the Century Room and the venue row. Very small rental inventory; expect ~$1,200&ndash;1,800 when something appears. Same easy ~15 min commute as Armory Park; blue only because supply is thin.'
     },
     {
-      name: 'University / West University', ll: [32.2330, -110.9590], rad: 1000, fit: 'blue', cm: 3.5,
-      s: { jazz: 3, music: 4, night: 5, climb: 4, hike: 2.5, ypro: 2.5, rest: 3.5, gym: 4.5 },
-      txt: 'Directly around the UA campus: cheap and lively, the epicenter of the bar/club scene — but dominated by undergrads and purpose-built student housing. 1BR roughly ~$900&ndash;1,300. Fine commute (~20 min), but a young professional may feel done with the student scene — depends on preference.'
+      name: 'University / West University', ll: [32.2330, -110.9590], rad: 1000, fit: 'blue', cm: 3.5, rentMid: 1100,
+      s: { jazz:3, music:4, night:5, rest:3.5, ypro:2.5, hist:4, walk:4.5, quiet:1.5,
+           climb:4, hike:2.5, bike:4, gym:4.5, pool:4,
+           groc:3, newc:4.5, safe:2.5, cat:2, transit:5 },
+      txt: 'Directly around the UA campus: cheap and lively, the epicenter of the bar/club scene, with the streetcar through the middle — but dominated by undergrads and purpose-built student housing. 1BR roughly ~$900&ndash;1,300. Fine commute (~20 min), but a young professional may feel done with the student scene — depends on preference.'
     },
     {
-      name: 'Sam Hughes', ll: [32.2290, -110.9300], rad: 1200, fit: 'green', cm: 3.5,
-      s: { jazz: 2.5, music: 3, night: 3, climb: 3.5, hike: 3, ypro: 4, rest: 3.5, gym: 4 },
-      txt: 'Leafy historic neighborhood east of UA — bungalows, casitas, and small complexes; consistently rated a top spot for young professionals who want quiet-but-close. 1BR roughly ~$1,000&ndash;1,400. About 20 min to Raytheon via Campbell/Kino Pkwy south; ~10 min drive to the downtown venues.'
+      name: 'Sam Hughes', ll: [32.2290, -110.9300], rad: 1200, fit: 'green', cm: 3.5, rentMid: 1200,
+      s: { jazz:2.5, music:3, night:3, rest:3.5, ypro:4, hist:4.5, walk:4, quiet:4,
+           climb:3.5, hike:3, bike:4, gym:4, pool:3,
+           groc:4, newc:1.5, safe:3.5, cat:4.5, transit:3 },
+      txt: 'Leafy historic neighborhood east of UA — bungalows, casitas, and small complexes; consistently rated a top spot for young professionals who want quiet-but-close, and a casita market that private landlords (read: cat-friendly) dominate. 1BR roughly ~$1,000&ndash;1,400. About 20 min to Raytheon via Campbell/Kino Pkwy south; ~10 min drive to the downtown venues.'
     },
     {
-      name: 'Menlo Park / Mercado', ll: [32.2220, -110.9850], rad: 1000, fit: 'blue', cm: 3.5,
-      s: { jazz: 3, music: 3, night: 2.5, climb: 3.5, hike: 4, ypro: 3.5, rest: 4, gym: 3 },
-      txt: 'Up-and-coming west-of-I-10 neighborhood anchored by the Mercado San Agustin district, with Tumamoc Hill and Sentinel Peak trails out the back door; streetcar into downtown. 1BR roughly ~$900&ndash;1,300. Commute ~18&ndash;20 min. Blue: improving fast but still patchy block-to-block.'
+      name: 'Menlo Park / Mercado', ll: [32.2220, -110.9850], rad: 1000, fit: 'blue', cm: 3.5, rentMid: 1100,
+      s: { jazz:3, music:3, night:2.5, rest:4, ypro:3.5, hist:4, walk:3.5, quiet:3.5,
+           climb:3.5, hike:4, bike:4.5, gym:3, pool:2.5,
+           groc:2.5, newc:3, safe:3, cat:4, transit:4.5 },
+      txt: 'Up-and-coming west-of-I-10 neighborhood anchored by the Mercado San Agustin district — the Sun Link streetcar’s western terminus — with Tumamoc Hill, Sentinel Peak, and The Loop river path out the back door. 1BR roughly ~$900&ndash;1,300. Commute ~18&ndash;20 min. Blue: improving fast but still patchy block-to-block.'
     },
     {
-      name: 'Midtown (Speedway/Broadway core)', ll: [32.2330, -110.9020], rad: 2200, fit: 'green', cm: 3.5,
-      s: { jazz: 2, music: 2.5, night: 2, climb: 3.5, hike: 2.5, ypro: 3, rest: 3.5, gym: 4 },
-      txt: 'Tucson’s big affordable middle — garden apartments and small complexes along the Speedway/Broadway corridors, close to everything by car. 1BR roughly ~$800&ndash;1,100, the best value on the map. 20&ndash;25 min to Raytheon via Alvernon or Kino south.'
+      name: 'Midtown (Speedway/Broadway core)', ll: [32.2330, -110.9020], rad: 2200, fit: 'green', cm: 3.5, rentMid: 950,
+      s: { jazz:2, music:2.5, night:2, rest:3.5, ypro:3, hist:2, walk:2.5, quiet:3,
+           climb:3.5, hike:2.5, bike:3.5, gym:4, pool:3.5,
+           groc:4.5, newc:2, safe:2.5, cat:3.5, transit:2.5 },
+      txt: 'Tucson’s big affordable middle — garden apartments and small complexes along the Speedway/Broadway corridors, with the metro’s best grocery/errand convenience. Bus-only transit. 1BR roughly ~$800&ndash;1,100, the best value on the map. 20&ndash;25 min to Raytheon via Alvernon or Kino south.'
     },
     {
-      name: 'East side (Broadway/Wilmot–Kolb)', ll: [32.2210, -110.8480], rad: 2500, fit: 'blue', cm: 3.5,
-      s: { jazz: 1, music: 1.5, night: 1.5, climb: 3.5, hike: 3.5, ypro: 2.5, rest: 3, gym: 4 },
+      name: 'East side (Broadway/Wilmot–Kolb)', ll: [32.2210, -110.8480], rad: 2500, fit: 'blue', cm: 3.5, rentMid: 1025,
+      s: { jazz:1, music:1.5, night:1.5, rest:3, ypro:2.5, hist:1, walk:2, quiet:3.5,
+           climb:3.5, hike:3.5, bike:4, gym:4, pool:4,
+           groc:4.5, newc:2.5, safe:3, cat:3, transit:2 },
       txt: 'Suburban-style apartment corridors with plenty of inventory and decent prices (1BR ~$850&ndash;1,200). The BLOC climbing gym (Tanque Verde Rd) and the Catalina Hwy up Mount Lemmon are closest from here. Commute is a reasonable 20&ndash;25 min down Kolb/Golf Links. Solid practical option, modest on walkable lifestyle.'
     },
     {
-      name: 'Rita Ranch', ll: [32.1350, -110.7770], rad: 2500, fit: 'green', cm: 4.5,
-      s: { jazz: 0.5, music: 1, night: 1, climb: 2, hike: 3.5, ypro: 3, rest: 2, gym: 3.5 },
-      txt: 'Newer master-planned area on the far southeast side — heavily populated by Raytheon and Davis-Monthan people for a reason: ~15 min straight up Valencia/Rita Rd to the plant. Newer complexes run ~$1,300&ndash;1,800 for a 1BR. Quiet and suburban; live music or jazz means a 25&ndash;30 min drive downtown.'
+      name: 'Rita Ranch', ll: [32.1350, -110.7770], rad: 2500, fit: 'green', cm: 4.5, rentMid: 1550,
+      s: { jazz:0.5, music:1, night:1, rest:2, ypro:3, hist:0.5, walk:2, quiet:4.5,
+           climb:2, hike:3.5, bike:4, gym:3.5, pool:4.5,
+           groc:3.5, newc:5, safe:4.5, cat:3, transit:1 },
+      txt: 'Newer master-planned area on the far southeast side — heavily populated by Raytheon and Davis-Monthan people for a reason: ~15 min straight up Valencia/Rita Rd to the plant, and the Fantasy Island mountain-bike trail network is next door. Newer complexes run ~$1,300&ndash;1,800 for a 1BR. Quiet and suburban; live music or jazz means a 25&ndash;30 min drive downtown.'
     },
     {
-      name: 'Civano', ll: [32.1640, -110.7740], rad: 1300, fit: 'blue', cm: 4,
-      s: { jazz: 0.5, music: 1, night: 0.5, climb: 2, hike: 4, ypro: 2, rest: 2, gym: 3 },
-      txt: 'A distinctive New-Urbanist/sustainable community off Houghton — charming walkable core near the Saguaro East/Fantasy Island trail systems, but mostly owner-occupied homes; rentals are scarce and often houses (~$1,600&ndash;2,200). ~20 min commute. Blue: great if a rental appears, but limited stock and a family-oriented feel.'
+      name: 'Civano', ll: [32.1640, -110.7740], rad: 1300, fit: 'blue', cm: 4, rentMid: 1900,
+      s: { jazz:0.5, music:1, night:0.5, rest:2, ypro:2, hist:1.5, walk:3.5, quiet:4.5,
+           climb:2, hike:4, bike:4.5, gym:3, pool:4.5,
+           groc:3, newc:4, safe:4.5, cat:3.5, transit:0.5 },
+      txt: 'A distinctive New-Urbanist/sustainable community off Houghton — charming walkable core, community pool, and the Saguaro East/Fantasy Island trail systems nearby, but mostly owner-occupied homes; rentals are scarce and often houses (~$1,600&ndash;2,200). ~20 min commute. Blue: great if a rental appears, but limited stock and a family-oriented feel.'
     },
     {
-      name: 'Vail', ll: [32.0480, -110.7120], rad: 3200, fit: 'blue', cm: 3.5,
-      s: { jazz: 0, music: 0.5, night: 0.5, climb: 2, hike: 4, ypro: 1.5, rest: 1.5, gym: 2.5 },
+      name: 'Vail', ll: [32.0480, -110.7120], rad: 3200, fit: 'blue', cm: 3.5, rentMid: 1850,
+      s: { jazz:0, music:0.5, night:0.5, rest:1.5, ypro:1.5, hist:1, walk:1, quiet:5,
+           climb:2, hike:4, bike:3.5, gym:2.5, pool:3.5,
+           groc:2.5, newc:5, safe:5, cat:3.5, transit:0.5 },
       txt: 'Fast-growing suburb southeast of Rita Ranch, top-rated schools, almost entirely single-family homes — house rentals ~$1,600&ndash;2,100, very few apartments. Good Rincon-foothills hiking (Colossal Cave, Cienega Creek). Commute ~25 min via I-10/Rita Rd. Blue: fine commute, but a family suburb with little for a single young professional.'
     },
     {
-      name: 'Sahuarita', ll: [31.9575, -110.9560], rad: 3200, fit: 'blue', cm: 4,
-      s: { jazz: 0.5, music: 1, night: 1, climb: 1.5, hike: 3, ypro: 2, rest: 2, gym: 3 },
+      name: 'Sahuarita', ll: [31.9575, -110.9560], rad: 3200, fit: 'blue', cm: 4, rentMid: 1500,
+      s: { jazz:0.5, music:1, night:1, rest:2, ypro:2, hist:0.5, walk:2, quiet:4.5,
+           climb:1.5, hike:3, bike:3, gym:3, pool:4.5,
+           groc:4, newc:5, safe:5, cat:3, transit:0.5 },
       txt: 'Newer planned community ~15&ndash;20 min straight down I-19 — one of the easiest commutes on the map. Clean and safe with lake-park amenities and Madera Canyon hiking a half hour south; 1BR/small rentals roughly ~$1,300&ndash;1,700 but mostly houses and a strongly family-oriented vibe. Blue: commute great, social scene thin.'
     },
     {
-      name: 'Green Valley', ll: [31.8540, -110.9940], rad: 3800, fit: 'gray', cm: 2.5,
-      s: { jazz: 1, music: 0.5, night: 0.5, climb: 1.5, hike: 3.5, ypro: 0, rest: 2, gym: 3 },
+      name: 'Green Valley', ll: [31.8540, -110.9940], rad: 3800, fit: 'gray', cm: 2.5, rentMid: 1300,
+      s: { jazz:1, music:0.5, night:0.5, rest:2, ypro:0, hist:1, walk:1.5, quiet:5,
+           climb:1.5, hike:3.5, bike:3, gym:3, pool:4.5,
+           groc:4, newc:3, safe:5, cat:2.5, transit:0.5 },
       txt: 'Largely a 55+ retirement community 25&ndash;30 min south on I-19. Rents are moderate (1BR ~$1,200&ndash;1,400) but the demographic skews decades older — a poor lifestyle match for a young engineer regardless of commute.'
     },
     {
-      name: 'South Tucson (city)', ll: [32.1960, -110.9680], rad: 900, fit: 'orange', cm: 5,
-      s: { jazz: 2, music: 2.5, night: 1.5, climb: 3.5, hike: 2.5, ypro: 2, rest: 4.5, gym: 3 },
+      name: 'South Tucson (city)', ll: [32.1960, -110.9680], rad: 900, fit: 'orange', cm: 5, rentMid: 850,
+      s: { jazz:2, music:2.5, night:1.5, rest:4.5, ypro:2, hist:3.5, walk:3, quiet:2,
+           climb:3.5, hike:2.5, bike:3.5, gym:3, pool:2,
+           groc:3, newc:1, safe:1.5, cat:3.5, transit:3 },
       txt: 'A separate one-square-mile city famous for its Mexican food corridor on S 4th Ave; Hotel McCoy’s music/art events are just across I-10. Very cheap (1BR ~$700&ndash;1,000) and only ~10&ndash;12 min from the plant, but rental quality is inconsistent and crime rates run higher than the metro average. Marginal: cheapest close-in option, look building-by-building.'
     },
     {
-      name: 'Catalina Foothills', ll: [32.2980, -110.9180], rad: 3200, fit: 'orange', cm: 1.5,
-      s: { jazz: 2.5, music: 1.5, night: 2, climb: 4, hike: 5, ypro: 2, rest: 4, gym: 4 },
+      name: 'Catalina Foothills', ll: [32.2980, -110.9180], rad: 3200, fit: 'orange', cm: 1.5, rentMid: 1750,
+      s: { jazz:2.5, music:1.5, night:2, rest:4, ypro:2, hist:1.5, walk:1.5, quiet:4.5,
+           climb:4, hike:5, bike:4, gym:4, pool:4.5,
+           groc:4, newc:3, safe:4.5, cat:2.5, transit:1 },
       txt: 'Upscale desert-view living on the north side — resort-style complexes near La Encantada, the best trailhead access in the metro (Sabino Canyon, Finger Rock), and regular resort jazz/live-music nights (e.g., Hacienda del Sol). 1BR roughly ~$1,400&ndash;2,000+. The catch: 35&ndash;45 min diagonally across the whole city in traffic.'
     },
     {
-      name: 'Oro Valley', ll: [32.3910, -110.9660], rad: 3800, fit: 'gray', cm: 1,
-      s: { jazz: 1, music: 1, night: 1, climb: 2.5, hike: 5, ypro: 1.5, rest: 3, gym: 4 },
-      txt: 'Well-kept suburb in the far northwest with newer complexes (1BR ~$1,500&ndash;1,900), Catalina State Park hiking, and an older, family/retiree demographic. 40&ndash;50 min to the Raytheon campus — the commute alone effectively rules it out.'
+      name: 'Oro Valley', ll: [32.3910, -110.9660], rad: 3800, fit: 'gray', cm: 1, rentMid: 1700,
+      s: { jazz:1, music:1, night:1, rest:3, ypro:1.5, hist:1, walk:1.5, quiet:5,
+           climb:2.5, hike:5, bike:4.5, gym:4, pool:4.5,
+           groc:4.5, newc:4.5, safe:5, cat:2.5, transit:1 },
+      txt: 'Well-kept suburb in the far northwest with newer complexes (1BR ~$1,500&ndash;1,900), Catalina State Park hiking, the 50-Year Trail MTB network, and an older, family/retiree demographic. 40&ndash;50 min to the Raytheon campus — the commute alone effectively rules it out.'
     }
   ];
 
   // ---- Scoring model ----
-  // No toggles on  -> baseline (preliminary) fit color.
-  // Toggles on     -> combined = 65% avg(checked dimensions) + 35% commute score,
-  //                   mapped to tiers; a neighborhood can rise at most ONE tier
-  //                   above its baseline (safety / rental-supply / demographic
-  //                   factors don't disappear when you toggle).
+  // No toggles on  -> baseline fit color; ranked list falls back to commute score.
+  // Toggles on     -> score = w*commute + (1-w)*avg(checked), w = commute-importance slider.
+  //                   Tier cap: max one tier above baseline (safety/supply/demographics persist).
+  // Max-rent slider: neighborhoods whose typical-1BR midpoint exceeds it are forced gray.
   var active = {};
   DIMS.forEach(function (d) { active[d.key] = false; });
+  var maxRent = PRESET_RENT;      // $
+  var commuteW = PRESET_CW / 100; // 0..1
 
   function activeKeys() {
     return DIMS.map(function (d) { return d.key; }).filter(function (k) { return active[k]; });
   }
+  function overBudget(h) { return h.rentMid > maxRent; }
   function combinedScore(h) {
     var keys = activeKeys();
     if (!keys.length) return null;
     var sum = 0;
     keys.forEach(function (k) { sum += h.s[k]; });
-    return 0.65 * (sum / keys.length) + 0.35 * h.cm;
+    return commuteW * h.cm + (1 - commuteW) * (sum / keys.length);
+  }
+  function rankScore(h) {
+    var sc = combinedScore(h);
+    return sc === null ? h.cm : sc;
   }
   function scoreTier(score) {
-    if (score >= 3.5) return 3;      // green
-    if (score >= 2.6) return 2;      // blue
-    if (score >= 2.0) return 1;      // orange
-    return 0;                        // gray
+    if (score >= 3.5) return 3;
+    if (score >= 2.6) return 2;
+    if (score >= 2.0) return 1;
+    return 0;
   }
   function currentTierName(h) {
+    if (overBudget(h)) return 'gray';
     var sc = combinedScore(h);
     if (sc === null) return h.fit;
     var dyn = scoreTier(sc);
     var base = TIERS.indexOf(h.fit);
-    return TIERS[Math.min(dyn, base + 1)];   // cap: max one tier above baseline
+    return TIERS[Math.min(dyn, base + 1)];
   }
 
   function buildPopup(h) {
@@ -271,19 +336,24 @@
     var f = FIT[tier];
     var sc = combinedScore(h);
     var html = '<b class="hood">' + h.name + '</b>' +
-      '<span class="fit-tag" style="background:' + f.color + '">' + f.name + '</span>' +
-      '<br>' + h.txt;
-    html += '<table class="scores">';
-    DIMS.forEach(function (d) {
-      var on = active[d.key];
-      html += '<tr><td class="' + (on ? 'on' : '') + '">' + (on ? '&#10003; ' : '') +
-              d.label.split(' (')[0] + '</td><td class="num ' + (on ? 'on' : '') + '">' +
-              h.s[d.key].toFixed(1) + '/5</td></tr>';
-    });
-    html += '</table>';
-    if (sc !== null) {
-      html += '<div style="margin-top:5px;font-size:12px"><b>Combined score: ' + sc.toFixed(2) +
-              '</b> <span style="color:#777">(65% checked factors + 35% commute)</span></div>';
+      '<span class="fit-tag" style="background:' + f.color + '">' + f.name + '</span>';
+    if (overBudget(h)) {
+      html += '<span class="ob-tag">Over budget</span>';
+    }
+    html += '<br>' + h.txt;
+    html += '<div style="margin-top:5px;font-size:12px">Typical 1BR midpoint: <b>$' + h.rentMid.toLocaleString() + '</b>' +
+            (overBudget(h) ? ' — <b>above your $' + maxRent.toLocaleString() + ' max</b>, so it is grayed out.' : '') + '</div>';
+    var keys = activeKeys();
+    if (keys.length) {
+      html += '<table class="scores">';
+      DIMS.forEach(function (d) {
+        if (!active[d.key]) return;
+        html += '<tr><td>&#10003; ' + d.label.split(' (')[0] + '</td><td class="num">' +
+                h.s[d.key].toFixed(1) + '/5</td></tr>';
+      });
+      html += '<tr><td>Commute (weight ' + Math.round(commuteW * 100) + '%)</td><td class="num">' +
+              h.cm.toFixed(1) + '/5</td></tr></table>';
+      html += '<div style="margin-top:5px;font-size:12px"><b>Combined score: ' + sc.toFixed(2) + '</b></div>';
     }
     html += '<br><span style="color:#888;font-size:11px">Rents: approx. 2025&ndash;26 listing averages ' +
             '(Apartments.com / RentCafe / Zumper / ApartmentList). Preliminary rating.</span>';
@@ -303,14 +373,32 @@
     circles.push({ hood: h, circle: c });
   });
 
-  function recolor() {
+  function updateUI() {
     circles.forEach(function (e) {
       var f = FIT[currentTierName(e.hood)];
       e.circle.setStyle({ color: f.color, fillColor: f.color });
     });
+    // ranked list: over-budget entries sink to the bottom
+    var ranked = hoods.slice().sort(function (a, b) {
+      var oa = overBudget(a) ? 1 : 0, ob = overBudget(b) ? 1 : 0;
+      if (oa !== ob) return oa - ob;
+      return rankScore(b) - rankScore(a);
+    });
+    var noneChecked = activeKeys().length === 0;
+    var lis = ranked.map(function (h, i) {
+      var label = h.name + ' <span class="sc">' + rankScore(h).toFixed(2) + '</span>' +
+                  (overBudget(h) ? ' <span class="ob">(over budget)</span>' : '');
+      return '<li>' + (i < 3 && !overBudget(h) ? '<b>' + label + '</b>' : label) + '</li>';
+    });
+    document.getElementById('ranklist').innerHTML = lis.join('');
+    document.getElementById('ranknote').textContent = noneChecked ?
+      'Nothing checked — ranked by commute score only.' :
+      'Ranked by ' + Math.round(commuteW * 100) + '% commute + ' + Math.round(100 - commuteW * 100) + '% checked factors.';
+    document.getElementById('rentval').textContent = '$' + maxRent.toLocaleString();
+    document.getElementById('cwval').textContent = Math.round(commuteW * 100) + '%';
   }
 
-  // ---- Title (top-left, under zoom) ----
+  // ---- Title (top-left) ----
   var titleCtl = L.control({ position: 'topleft' });
   titleCtl.onAdd = function () {
     var d = L.DomUtil.create('div', 'title-box');
@@ -320,26 +408,33 @@
   };
   titleCtl.addTo(map);
 
-  // ---- Toggle panel (top-right) ----
+  // ---- Control panel (top-right) ----
   var toggleCtl = L.control({ position: 'topright' });
   toggleCtl.onAdd = function () {
     var d = L.DomUtil.create('div', 'togglepanel');
     L.DomEvent.disableClickPropagation(d);
     L.DomEvent.disableScrollPropagation(d);
-    function cb(k) {
-      var dim = DIMS.filter(function (x) { return x.key === k; })[0];
-      return '<label><input type="checkbox" id="dim-' + k + '">' + dim.label + '</label>';
-    }
     var html = '<h4>What matters to him? (recolors map)</h4>';
-    html += '<div class="grouphdr">Music &amp; nightlife (separate)</div>';
-    ['jazz', 'music', 'night'].forEach(function (k) { html += cb(k); });
-    html += '<div class="grouphdr">Everything else</div>';
-    ['climb', 'hike', 'ypro', 'rest', 'gym'].forEach(function (k) { html += cb(k); });
+    GROUPS.forEach(function (g) {
+      html += '<div class="grouphdr">' + g.title + '</div>';
+      DIMS.forEach(function (dim) {
+        if (dim.grp !== g.id) return;
+        html += '<label class="tgl"><input type="checkbox" id="dim-' + dim.key + '">' + dim.label + '</label>';
+      });
+    });
+    html += '<div class="sliderrow">Max rent (1BR midpoint): <span class="val" id="rentval">$' + PRESET_RENT.toLocaleString() + '</span>' +
+            '<input type="range" id="rentslider" min="900" max="2400" step="25" value="' + PRESET_RENT + '"></div>';
+    html += '<div class="sliderrow">Commute importance: <span class="val" id="cwval">' + PRESET_CW + '%</span>' +
+            '<input type="range" id="cwslider" min="0" max="100" step="5" value="' + PRESET_CW + '"></div>';
     html += '<div class="btnrow">' +
             '<button class="preset" id="btn-son">Son&rsquo;s preset</button>' +
-            '<button id="btn-clear">Clear all</button></div>' +
-            '<div class="note">Nothing checked = baseline preliminary colors. Checked = 65% those factors + 35% commute; ' +
-            'orange/gray baseline areas can rise at most one tier (safety, rental supply, and demographics still apply).</div>';
+            '<button id="btn-clear">Clear all</button></div>';
+    html += '<div class="grouphdr">Ranking (live)</div>' +
+            '<div id="ranknote" style="font-size:10.5px;color:#666"></div>' +
+            '<ol id="ranklist"></ol>';
+    html += '<div class="note">Nothing checked = baseline preliminary colors. Checked = commute-importance% commute + rest checked factors; ' +
+            'orange/gray baseline areas can rise at most one tier (safety, rental supply, demographics still apply). ' +
+            'Neighborhoods whose typical 1BR midpoint exceeds Max rent are forced gray.</div>';
     d.innerHTML = html;
     return d;
   };
@@ -348,16 +443,28 @@
   DIMS.forEach(function (d) {
     document.getElementById('dim-' + d.key).addEventListener('change', function (ev) {
       active[d.key] = ev.target.checked;
-      recolor();
+      updateUI();
       map.closePopup();
     });
+  });
+  document.getElementById('rentslider').addEventListener('input', function (ev) {
+    maxRent = parseInt(ev.target.value, 10);
+    updateUI();
+  });
+  document.getElementById('cwslider').addEventListener('input', function (ev) {
+    commuteW = parseInt(ev.target.value, 10) / 100;
+    updateUI();
   });
   document.getElementById('btn-son').addEventListener('click', function () {
     DIMS.forEach(function (d) {
       active[d.key] = !!SON_PRESET[d.key];
       document.getElementById('dim-' + d.key).checked = active[d.key];
     });
-    recolor();
+    maxRent = PRESET_RENT;
+    commuteW = PRESET_CW / 100;
+    document.getElementById('rentslider').value = PRESET_RENT;
+    document.getElementById('cwslider').value = PRESET_CW;
+    updateUI();
     map.closePopup();
   });
   document.getElementById('btn-clear').addEventListener('click', function () {
@@ -365,7 +472,7 @@
       active[d.key] = false;
       document.getElementById('dim-' + d.key).checked = false;
     });
-    recolor();
+    updateUI();
     map.closePopup();
   });
 
@@ -378,14 +485,16 @@
       '<div><span class="swatch" style="background:' + FIT.green.color  + '"></span>Green &mdash; strong candidate (commute + lifestyle)</div>' +
       '<div><span class="swatch" style="background:' + FIT.blue.color   + '"></span>Blue &mdash; potential, depends on preferences</div>' +
       '<div><span class="swatch" style="background:' + FIT.orange.color + '"></span>Orange &mdash; marginal</div>' +
-      '<div><span class="swatch" style="background:' + FIT.gray.color   + '"></span>Gray &mdash; likely ruled out</div>' +
+      '<div><span class="swatch" style="background:' + FIT.gray.color   + '"></span>Gray &mdash; likely ruled out / over budget</div>' +
       '<div class="ringnote">&#9733; = RTX campus (1151 E Hermans Rd).<br>' +
       'Dashed rings &asymp; 15 / 25 / 35-min drives (8 / 14 / 20 mi).<br>' +
-      'Use the checkbox panel (top right) to recolor by his priorities.</div>' +
+      'Use the panel (top right) to recolor by his priorities.</div>' +
       '<div class="prelim">Preliminary &mdash; will refine with preferences (budget &amp; lifestyle answers still being collected).</div>';
     return d;
   };
   legend.addTo(map);
+
+  updateUI();
 </script>
 </body>
 </html>

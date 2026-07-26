@@ -1,0 +1,23 @@
+{
+  "method": "Google Maps directions, 'Depart at' Monday Jul 27 2026, 7:15 AM (neighborhood->plant) and 4:45 PM (plant->neighborhood), pessimistic end of the 'typically' range on the recommended route. Destination: Raytheon, 1151 E Hermans Rd, Tucson AZ 85756 (32.1051,-110.9456). Measured 2026-07-26 by map-build agent; full AM/PM ranges in agent transcript.",
+  "status": "PARKED - not yet applied to map scoring per Will's instruction; apply in final fine-tune pass",
+  "worst_of_both_directions_minutes": {
+    "Downtown/4th Ave": 35,
+    "Armory Park": 30,
+    "Barrio Viejo": 28,
+    "University/West University": 35,
+    "Sam Hughes": 40,
+    "Menlo Park/Mercado": 26,
+    "Midtown": 40,
+    "East side (Wilmot-Kolb)": 50,
+    "Rita Ranch": 50,
+    "Civano": 45,
+    "Vail": 40,
+    "Sahuarita": 22,
+    "Green Valley": 35,
+    "South Tucson": 26,
+    "Catalina Foothills": 60,
+    "Oro Valley": 65
+  },
+  "notes": "Google's pessimistic bounds are much harsher on Rita Ranch (Valencia corridor congestion) and Foothills/Oro Valley than the judgment-based scores currently in the map. Discuss with Will before applying."
+}
