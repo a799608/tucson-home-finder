@@ -558,6 +558,60 @@
            !hiddenIds[l.id] && (!l.price || l.price <= maxRent);
   }
 
+  var interested = {};
+  try { interested = JSON.parse(localStorage.getItem('interestedListings') || '{}'); } catch (e) {}
+
+  function saveInterested() { localStorage.setItem('interestedListings', JSON.stringify(interested)); }
+
+  window._toggleInterest = function (id) {
+    if (interested[id]) { delete interested[id]; }
+    else { interested[id] = { when: new Date().toISOString() }; }
+    saveInterested();
+    map.closePopup();
+    rebuildListings();
+  };
+  window._removeInterest = function (id) {
+    delete interested[id];
+    saveInterested();
+    rebuildListings();
+  };
+  window._copyInterest = function () {
+    var lines = [];
+    listingsData.forEach(function (l) {
+      if (!interested[l.id]) return;
+      lines.push('$' + l.price + '/mo · ' + l.beds + 'bd/' + (l.baths == null ? '?' : l.baths) + 'ba · ' + l.address +
+        (l.contact_name ? ' · ' + l.contact_name : '') +
+        (l.contact_phone ? ' · ' + l.contact_phone : '') +
+        ' · ' + l.url);
+    });
+    var txt = lines.join('\n');
+    (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(
+      function () { alert('Copied ' + lines.length + ' listings with contact info.'); },
+      function () { window.prompt('Copy your interest list:', txt); });
+  };
+
+  function renderInterestPanel() {
+    var el = document.getElementById('int-body');
+    var hd = document.getElementById('int-head');
+    if (!el || !hd) return;
+    var items = listingsData.filter(function (l) { return interested[l.id]; });
+    hd.innerHTML = '&#9829; Interest list (' + items.length + ')';
+    if (!items.length) { el.innerHTML = '<div style="color:#888;font-size:11px">Click &#9829; Interested on a listing to add it here.</div>'; return; }
+    var h = items.map(function (l) {
+      var contact = l.contact_phone
+        ? (l.contact_name ? esc(l.contact_name) + ' &middot; ' : '') + '<a href="tel:' + esc(l.contact_phone) + '" style="font-weight:600">' + esc(l.contact_phone) + '</a>'
+        : (l.contact_name ? esc(l.contact_name) + ' &middot; ' : '') + '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">contact via listing page</a>';
+      return '<div style="border-top:1px solid #eee;padding:4px 0;font-size:11.5px">' +
+        '<b>$' + (l.price ? l.price.toLocaleString() : '?') + '</b> &middot; ' + esc(l.beds) + 'bd/' + esc(l.baths == null ? '?' : l.baths) + 'ba &middot; ' +
+        '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.address) + '</a><br>' +
+        '<span style="color:#444">' + contact + '</span> ' +
+        '<a href="#" onclick="_removeInterest(\'' + esc(l.id) + '\');return false" style="color:#c33;float:right">&#10008; remove</a>' +
+        '</div>';
+    }).join('');
+    h += '<button onclick="_copyInterest()" style="margin-top:5px;width:100%;background:#1e8a3c;color:#fff;border:none;border-radius:4px;padding:5px;cursor:pointer;font-weight:600">Copy list (with contacts)</button>';
+    el.innerHTML = h;
+  }
+
   window._hideListing = function (id) {
     var reason = window.prompt('Pass on this one — why? (optional; helps tune his preferences)') || '';
     hiddenIds[id] = { when: new Date().toISOString(), reason: reason };
@@ -587,8 +641,14 @@
     h += '<div style="color:#333">' + esc(l.title) + '</div>';
     h += '<div style="color:#666">' + esc(l.address) + '</div>';
     h += '<div style="color:#666;text-transform:capitalize">' + esc(l.property_type) + ' &middot; ' + esc(l.pets_note || 'pets: see listing') + '</div>';
-    h += '<div style="margin-top:6px;display:flex;gap:6px">' +
-         '<a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#1e8a3c;color:#fff;padding:5px 0;border-radius:4px;text-decoration:none;font-weight:600">View listing</a>' +
+    if (l.contact_phone) {
+      h += '<div style="color:#333;font-weight:600">&#9742; ' + (l.contact_name ? esc(l.contact_name) + ' &middot; ' : '') +
+           '<a href="tel:' + esc(l.contact_phone) + '">' + esc(l.contact_phone) + '</a></div>';
+    }
+    var isInt = !!interested[l.id];
+    h += '<div style="margin-top:6px;display:flex;gap:5px">' +
+         '<a href="' + esc(l.url) + '" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#1e8a3c;color:#fff;padding:5px 0;border-radius:4px;text-decoration:none;font-weight:600">View</a>' +
+         '<button onclick="_toggleInterest(\'' + esc(l.id) + '\')" style="flex:1.2;background:' + (isInt ? '#d4af37' : '#fff') + ';border:1px solid #b8962e;color:' + (isInt ? '#fff' : '#8a6d1a') + ';border-radius:4px;cursor:pointer;font-weight:600">&#9829; ' + (isInt ? 'On list' : 'Interested') + '</button>' +
          '<button onclick="_hideListing(\'' + esc(l.id) + '\')" style="flex:1;background:#fff;border:1px solid #c33;color:#c33;border-radius:4px;cursor:pointer;font-weight:600">&#10008; Pass</button>' +
          '</div>';
     h += '<div style="color:#999;font-size:10.5px;margin-top:3px">source: ' + esc(l.source) + ' &middot; ' + esc(l.listed_date_or_age || '') + '</div></div>';
@@ -602,8 +662,9 @@
     listingsData.forEach(function (l) {
       if (!l.lat || !l.lng || !listingShown(l)) return;
       shown++;
+      var isInt = !!interested[l.id];
       var m = L.circleMarker([l.lat, l.lng], {
-        radius: 6, color: '#fff', weight: 1.5,
+        radius: isInt ? 8 : 6, color: isInt ? '#d4af37' : '#fff', weight: isInt ? 3 : 1.5,
         fillColor: TYPE_COLOR[l.property_type] || '#555', fillOpacity: 0.95
       });
       m.bindPopup(listingPopup(l), { maxWidth: 300 });
@@ -619,6 +680,7 @@
         (hid ? ' &middot; ' + hid + ' passed <a href="#" onclick="_resetHidden();return false">reset</a> ' +
                '<a href="#" onclick="_copyHidden();return false">copy</a>' : '');
     }
+    renderInterestPanel();
   }
 
   window._showHoodListings = function (i) {
@@ -680,6 +742,21 @@
       return d2;
     };
     lc.addTo(map);
+
+    var ic = L.control({ position: 'bottomleft' });
+    ic.onAdd = function () {
+      var d3 = L.DomUtil.create('div', 'legend');
+      d3.style.maxWidth = '250px';
+      d3.innerHTML = '<h4 id="int-head" style="margin:0;cursor:pointer">&#9829; Interest list (0)</h4>' +
+        '<div id="int-body" style="max-height:220px;overflow-y:auto"></div>';
+      L.DomEvent.disableClickPropagation(d3);
+      d3.querySelector('#int-head').addEventListener('click', function () {
+        var b = d3.querySelector('#int-body');
+        b.style.display = (b.style.display === 'none' ? '' : 'none');
+      });
+      return d3;
+    };
+    ic.addTo(map);
 
     document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
     document.getElementById('lst-zones').addEventListener('change', function (ev) { zonesOnly = ev.target.checked; selectedHood = null; rebuildListings(); });
