@@ -20,6 +20,27 @@
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <style>
   html, body { height: 100%; margin: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+  /* ---- Mobile: panels become bottom-sheet tabs ---- */
+  @media (max-width: 700px) {
+    .title-box { display: none !important; }
+    .mpanel { display: none !important; }
+    .mpanel.mopen {
+      display: block !important; position: fixed !important;
+      left: 8px; right: 8px; bottom: 56px; top: auto !important;
+      max-height: 62vh; overflow-y: auto; z-index: 10000;
+      max-width: none !important; width: auto !important; margin: 0 !important;
+    }
+    .mtabbar {
+      position: fixed; bottom: 0; left: 0; right: 0; display: flex; z-index: 10001;
+      background: #fff; border-top: 1px solid #ccc; box-shadow: 0 -2px 8px rgba(0,0,0,.15);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .mtab { flex: 1; padding: 12px 2px; font-size: 12.5px; border: none; background: #fff; font-weight: 700; color: #333; }
+    .mtab.mact { background: #1e8a3c; color: #fff; }
+    .togglepanel label, .legend label { display: inline-block; padding: 3px 0; }
+    .hood-label { font-size: 9px !important; }
+    .leaflet-control-attribution { font-size: 9px; }
+  }
   #map { height: 100%; width: 100%; }
 
   .title-box {
@@ -551,6 +572,31 @@
 
   updateUI();
 
+  // ---- Mobile bottom-sheet tabs (narrow screens only) ----
+  var IS_MOBILE = window.innerWidth <= 700;
+  var _mtabbar = null;
+  function addMobilePanel(el, label) {
+    if (!IS_MOBILE || !el) return;
+    if (!_mtabbar) {
+      _mtabbar = document.createElement('div');
+      _mtabbar.className = 'mtabbar';
+      document.body.appendChild(_mtabbar);
+    }
+    el.classList.add('mpanel');
+    var b = document.createElement('button');
+    b.className = 'mtab';
+    b.textContent = label;
+    b.addEventListener('click', function () {
+      var wasOpen = el.classList.contains('mopen');
+      document.querySelectorAll('.mpanel').forEach(function (p) { p.classList.remove('mopen'); });
+      document.querySelectorAll('.mtab').forEach(function (t) { t.classList.remove('mact'); });
+      if (!wasOpen) { el.classList.add('mopen'); b.classList.add('mact'); }
+    });
+    _mtabbar.appendChild(b);
+  }
+  addMobilePanel(document.querySelector('.togglepanel'), '🎛 Interests');
+  addMobilePanel(document.querySelector('.legend'), 'ℹ Legend');
+
   // ---- Listings layer (listings.json, refreshed by listings_scan.py) ----
   var listingsData = [];
   var listingCluster = null;
@@ -831,6 +877,9 @@
       return d3;
     };
     ic.addTo(map);
+
+    addMobilePanel(document.getElementById('lst-on').closest('.legend'), '🏠 Listings');
+    addMobilePanel(document.getElementById('int-head').closest('.legend'), '♥ List');
 
     document.getElementById('lst-on').addEventListener('change', function (ev) { listingsVisible = ev.target.checked; rebuildListings(); });
     document.getElementById('lst-zones').addEventListener('change', function (ev) { zonesOnly = ev.target.checked; selectedHood = null; rebuildListings(); });
